@@ -9,7 +9,8 @@ import argparse
 # from random import randrange
 from bisect import bisect_right
 import hashlib
- 
+import jpholiday
+
 # Example:
 # python relayscheduler.py
 #
@@ -100,6 +101,8 @@ if __name__ == '__main__':
                         help='post an idependent message out of the thread, not destroying previous thread info',
                         action='store_true')
     parser.add_argument('--list', help='list the future orders.',
+                        action='store_true')
+    parser.add_argument('--skipholiday', help='skip holidays in Japan.',
                         action='store_true')
     parser.add_argument('-c', '--channel', default=channel_name,
                         help='slack channel to read & post.')
@@ -208,9 +211,12 @@ if __name__ == '__main__':
                 writers_dict[d] = writer
         else:
             writers = next_writers(members, len(relaydays), last_writer)
-            lastwriter = writers[-1]
-            for i, d in enumerate(relaydays):
-                writers_dict[d] = writers[i]
+            i = 0
+            for d in relaydays:
+                date = startday + datetime.timedelta(d)
+                if not (args.skipholiday and jpholiday.is_holiday(datetime.date(date.year, date.month, date.day))):
+                    writers_dict[d] = writers[i]
+                    i += 1
             # write the new history
             with open(history_file_path, 'w') as f:
                 for d, u in writers_dict.items():
@@ -225,9 +231,10 @@ if __name__ == '__main__':
             else:
                 date = startday + datetime.timedelta(d)
                 post_lines.append(post_line_format % (date.month, date.day, weekdays[d], writer))
-        post_lines.append(
-            post_footer
-        )
+        if len(post_lines) > 1:
+            post_lines.append(post_footer)
+        else:
+            post_lines.append(post_nobody)
     else:
         post_lines.append(post_nobody)
     message = '\n'.join(post_lines)
