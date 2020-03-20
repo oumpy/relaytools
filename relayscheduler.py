@@ -203,9 +203,10 @@ if __name__ == '__main__':
                 writers_dict[d] = writer
         else:
             writers = next_writers(members, len(relaydays), last_writer)
-            lastwriter = writers[-1]
-            for i, d in enumerate(relaydays):
+            i = 0
+            for d in relaydays:
                 writers_dict[d] = writers[i]
+                i += 1
             # write the new history
             with open(history_file_path, 'w') as f:
                 for d, u in writers_dict.items():
