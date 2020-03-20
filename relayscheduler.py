@@ -231,9 +231,10 @@ if __name__ == '__main__':
             else:
                 date = startday + datetime.timedelta(d)
                 post_lines.append(post_line_format % (date.month, date.day, weekdays[d], writer))
-        post_lines.append(
-            post_footer
-        )
+        if len(post_lines) > 1:
+            post_lines.append(post_footer)
+        else:
+            post_lines.append(post_nobody)
     else:
         post_lines.append(post_nobody)
     message = '\n'.join(post_lines)
