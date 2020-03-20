@@ -9,7 +9,8 @@ import argparse
 # from random import randrange
 from bisect import bisect_right
 import hashlib
- 
+import jpholiday
+
 # Example:
 # python relayscheduler.py
 #
@@ -100,6 +101,8 @@ if __name__ == '__main__':
                         help='post an idependent message out of the thread, not destroying previous thread info',
                         action='store_true')
     parser.add_argument('--list', help='list the future orders.',
+                        action='store_true')
+    parser.add_argument('--skipholiday', help='skip holidays in Japan.',
                         action='store_true')
     parser.add_argument('-c', '--channel', default=channel_name,
                         help='slack channel to read & post.')
