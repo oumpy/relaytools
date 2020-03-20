@@ -3,7 +3,7 @@
 import requests
 from collections import defaultdict
 import os
-from datetime import date, timedelta
+import datetime
 from slack import WebClient
 import argparse
 # from random import randrange
@@ -121,12 +121,12 @@ if __name__ == '__main__':
     history_file_path_format = history_dir + history_file_format
     excluded_members_file_path = base_dir + excluded_members_file
 
-    today = date.today()
-    ADfirst = date(1,1,1) # AD1.1.1 is Monday
+    today = datetime.date.today()
+    ADfirst = datetime.date(1,1,1) # AD1.1.1 is Monday
     today_id = (today-ADfirst).days
     thisweek_id = today_id // 7
-    startday = today + timedelta(min_grace)
-    startday += timedelta((7-startday.weekday())%7)
+    startday = today + datetime.timedelta(min_grace)
+    startday += datetime.timedelta((7-startday.weekday())%7)
     date_id = (startday-ADfirst).days
     week_id = date_id // 7
     history_file_path = history_file_path_format % week_id
@@ -222,7 +222,7 @@ if __name__ == '__main__':
             if args.list:
                 post_lines.append(post_line_format % writer)
             else:
-                date = startday + timedelta(d)
+                date = startday + datetime.timedelta(d)
                 post_lines.append(post_line_format % (date.month, date.day, weekdays[d], writer))
         post_lines.append(
             post_footer
