@@ -107,6 +107,8 @@ if __name__ == '__main__':
                         help='slack channel to post.')
     parser.add_argument('--slacktoken', default=None,
                         help='slack bot token.')
+    parser.add_argument('--date', default=None,
+                        help='specify arbitrary date "yyyy-mm-dd" for test.')
     args = parser.parse_args()
 
     if args.noslack:
@@ -118,7 +120,10 @@ if __name__ == '__main__':
     history_file_path_format = history_dir + history_file_format
     excluded_members_file_path = base_dir + excluded_members_file
 
-    today = datetime.date.today()
+    if args.date:
+        today = datetime.date.fromisoformat(args.date)
+    else:
+        today = datetime.date.today()
     ADfirst = datetime.date(1,1,1) # AD1.1.1 is Monday
     today_id = (today-ADfirst).days
     thisweek_id = today_id // 7
