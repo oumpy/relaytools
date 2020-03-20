@@ -208,8 +208,10 @@ if __name__ == '__main__':
             writers = next_writers(members, len(relaydays), last_writer)
             i = 0
             for d in relaydays:
-                writers_dict[d] = writers[i]
-                i += 1
+                date = startday + datetime.timedelta(d)
+                if not (args.skipholiday and jpholiday.is_holiday(datetime.date(date.year, date.month, date.day))):
+                    writers_dict[d] = writers[i]
+                    i += 1
             # write the new history
             with open(history_file_path, 'w') as f:
                 for d, u in writers_dict.items():
