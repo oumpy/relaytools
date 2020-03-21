@@ -3,13 +3,14 @@
 import requests
 from collections import defaultdict
 import os
-from datetime import date, timedelta
+import datetime
 from slack import WebClient
 import argparse
 # from random import randrange
 from bisect import bisect_right
 import hashlib
- 
+import jpholiday
+
 # Example:
 # python relayscheduler.py
 #
@@ -24,8 +25,8 @@ relaydays = [0, 1, 2, 3, 4] # cronとは曜日番号が違うので注意。
 # 平日に投稿、水曜に発表、月曜にリマインド、を想定。
 
 weekdays = ['月', '火', '水', '木', '金', '土', '日']
-year_first_day =  104 # 1月4日から
-year_last_day = 1223 # 12月23日まで
+custom_holidays = [(1,d) for d in range(1,4)] + [(12,d) for d in range(24,32)]
+# 12月24日から1月3日は休日扱い
 
 excluded_members = set()
 
@@ -41,7 +42,7 @@ week_str = ['今週', '来週', '再来週']
 post_format = {
     'post_header_format' : '＊【%sのリレー投稿 担当者のお知らせ】＊',
     'post_line_format' : '%d月%d日(%s)：<@%s> さん', # month, day, weekday, writer
-    'post_nobody' : '執筆予定者はいません。',
+    'post_nobody' : '投稿予定者はいません。 :face_with_rolling_eyes:',
     'post_footer' : '\nよろしくお願いします！ :sparkles:', # winner
 }
 post_format_reminder = {
@@ -87,6 +88,14 @@ def next_writers(members, n, lastwriter):
     s = bisect_right(hashed_members, hashed_lastwriter)
     return [ hashed_members[(s+i) % N][1] for i in range(n) ]
 
+def to_be_skipped(year, month, day):
+    if not args.skipholiday:
+        return False
+    elif jpholiday.is_holiday(datetime.date(year, month, day)):
+        return True
+    elif (month, day) in custom_holidays:
+        return True
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -101,12 +110,16 @@ if __name__ == '__main__':
                         action='store_true')
     parser.add_argument('--list', help='list the future orders.',
                         action='store_true')
+    parser.add_argument('--skipholiday', help='skip holidays in Japan.',
+                        action='store_true')
     parser.add_argument('-c', '--channel', default=channel_name,
                         help='slack channel to read & post.')
     parser.add_argument('-o', '--outchannel', default=None,
                         help='slack channel to post.')
     parser.add_argument('--slacktoken', default=None,
                         help='slack bot token.')
+    parser.add_argument('--date', default=None,
+                        help='specify arbitrary date "yyyy-mm-dd" for test.')
     args = parser.parse_args()
 
     if args.noslack:
@@ -118,12 +131,15 @@ if __name__ == '__main__':
     history_file_path_format = history_dir + history_file_format
     excluded_members_file_path = base_dir + excluded_members_file
 
-    today = date.today()
-    ADfirst = date(1,1,1) # AD1.1.1 is Monday
+    if args.date:
+        today = datetime.date.fromisoformat(args.date)
+    else:
+        today = datetime.date.today()
+    ADfirst = datetime.date(1,1,1) # AD1.1.1 is Monday
     today_id = (today-ADfirst).days
     thisweek_id = today_id // 7
-    startday = today + timedelta(min_grace)
-    startday += timedelta((7-startday.weekday())%7)
+    startday = today + datetime.timedelta(min_grace)
+    startday += datetime.timedelta((7-startday.weekday())%7)
     date_id = (startday-ADfirst).days
     week_id = date_id // 7
     history_file_path = history_file_path_format % week_id
@@ -203,9 +219,12 @@ if __name__ == '__main__':
                 writers_dict[d] = writer
         else:
             writers = next_writers(members, len(relaydays), last_writer)
-            lastwriter = writers[-1]
-            for i, d in enumerate(relaydays):
-                writers_dict[d] = writers[i]
+            i = 0
+            for d in relaydays:
+                date = startday + datetime.timedelta(d)
+                if not to_be_skipped(date.year, date.month, date.day):
+                    writers_dict[d] = writers[i]
+                    i += 1
             # write the new history
             with open(history_file_path, 'w') as f:
                 for d, u in writers_dict.items():
@@ -218,11 +237,12 @@ if __name__ == '__main__':
             if args.list:
                 post_lines.append(post_line_format % writer)
             else:
-                date = startday + timedelta(d)
+                date = startday + datetime.timedelta(d)
                 post_lines.append(post_line_format % (date.month, date.day, weekdays[d], writer))
-        post_lines.append(
-            post_footer
-        )
+        if len(post_lines) > 1:
+            post_lines.append(post_footer)
+        else:
+            post_lines.append(post_nobody)
     else:
         post_lines.append(post_nobody)
     message = '\n'.join(post_lines)
