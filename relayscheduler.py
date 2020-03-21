@@ -27,6 +27,7 @@ relaydays = [0, 1, 2, 3, 4] # cronとは曜日番号が違うので注意。
 weekdays = ['月', '火', '水', '木', '金', '土', '日']
 year_first_day =  104 # 1月4日から
 year_last_day = 1223 # 12月23日まで
+custom_holidays = []
 
 excluded_members = set()
 
@@ -87,6 +88,14 @@ def next_writers(members, n, lastwriter):
     hashed_lastwriter = (hashf(lastwriter), lastwriter)
     s = bisect_right(hashed_members, hashed_lastwriter)
     return [ hashed_members[(s+i) % N][1] for i in range(n) ]
+
+def to_be_skipped(year, month, day):
+    if not args.skipholiday:
+        return False
+    elif jpholiday.is_holiday(datetime.date(year, month, day)):
+        return True
+    elif (month, day) in custom_holidays:
+        return True
 
 
 if __name__ == '__main__':
@@ -214,7 +223,7 @@ if __name__ == '__main__':
             i = 0
             for d in relaydays:
                 date = startday + datetime.timedelta(d)
-                if not (args.skipholiday and jpholiday.is_holiday(datetime.date(date.year, date.month, date.day))):
+                if not to_be_skipped(date.year, date.month, date.day):
                     writers_dict[d] = writers[i]
                     i += 1
             # write the new history
