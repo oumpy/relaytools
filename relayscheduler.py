@@ -42,7 +42,7 @@ week_str = ['今週', '来週', '再来週']
 post_format = {
     'post_header_format' : '＊【%sのリレー投稿 担当者のお知らせ】＊',
     'post_line_format' : '%d月%d日(%s)：<@%s> さん', # month, day, weekday, writer
-    'post_nobody' : '執筆予定者はいません。',
+    'post_nobody' : '投稿予定者はいません。 :face_with_rolling_eyes:',
     'post_footer' : '\nよろしくお願いします！ :sparkles:', # winner
 }
 post_format_reminder = {
