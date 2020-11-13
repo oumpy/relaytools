@@ -46,12 +46,13 @@ def write_advice(**payload):
     if not f'<@{my_id}>' in text:
         return
 
-    channel_info = web_client.api_call('channels.info', params={'channel':channel_id})['channel']
+    channel_info = web_client.api_call('conversations.info', params={'channel':channel_id})['channel']
+    channel_members = web_client.api_call('conversations.members', params={'channel':channel_id})['members']
     # ensure I am a member of the channel.
     if not channel_info['is_member']:
         return
 
-    members = set(channel_info['members'])
+    members = set(channel_members)
     members.discard(my_id)
     if len(members) > 1:
         members.discard(user)
