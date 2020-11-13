@@ -208,11 +208,12 @@ if __name__ == '__main__':
                 lines = f.readlines()
                 for line in lines:
                     excluded_members.add(line.rstrip().split()[1])
-        channel_info = web_client.api_call('channels.info', params={'channel':channel_id})['channel']
+        channel_members = web_client.api_call('conversations.members', params={'channel':channel_id})['members']
         # ensure I am a member of the channel.
+        # channel_info = web_client.api_call('conversations.info', params={'channel':channel_id})['channel']
         # if not channel_info['is_member']:
         #     return
-        members = set(channel_info['members']) - excluded_members
+        members = set(channel_members) - excluded_members
         members.discard(my_id)
         if args.list:
             for d, writer in enumerate(next_writers(members, len(members), last_writer)):
