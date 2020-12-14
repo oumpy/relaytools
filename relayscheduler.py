@@ -25,8 +25,8 @@ relaydays = [0, 1, 2, 3, 4] # cronとは曜日番号が違うので注意。
 # 平日に投稿、水曜に発表、月曜にリマインド、を想定。
 
 weekdays = ['月', '火', '水', '木', '金', '土', '日']
-custom_holidays = [(1,d) for d in range(1,4)] + [(12,d) for d in range(24,32)]
-# 12月24日から1月3日は休日扱い
+custom_holidays = [(1,d) for d in range(1,4)] + [(12,d) for d in range(21,32)]
+# 12月21日から1月3日は休日扱い
 
 excluded_members = set()
 
