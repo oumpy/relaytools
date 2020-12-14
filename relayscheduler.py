@@ -38,11 +38,11 @@ history_dir = base_dir + 'history/'
 ts_file = 'ts-relay'
 history_file_format = 'week-%d.txt' # week ID.
 excluded_members_file = 'excluded_members.txt'
-week_str = ['今週', '来週', '再来週']
+weeks_str = ['今週', '来週', '再来週']
 post_format = {
     'post_header_format' : '＊【%sのリレー投稿 担当者のお知らせ】＊',
     'post_line_format' : '%d月%d日(%s)：<@%s> さん', # month, day, weekday, writer
-    'post_nobody' : '投稿予定者はいません。 :face_with_rolling_eyes:',
+    'post_nobody' : '\n%sはお休みです。 :sleeping:', # week_str
     'post_footer' : '\nよろしくお願いします！ :sparkles:', # winner
 }
 post_format_reminder = {
@@ -232,7 +232,8 @@ if __name__ == '__main__':
                     print(date_id + d, u, file=f)
 
     if args.list: week_id = max(week_id, lastweek_id + 1)
-    post_lines = [post_header_format % week_str[week_id - thisweek_id]]
+    week_str = weeks_str[week_id - thisweek_id]
+    post_lines = [post_header_format % week_str]
     if writers_dict:
         for d, writer in writers_dict.items():
             if args.list:
@@ -243,9 +244,9 @@ if __name__ == '__main__':
         if len(post_lines) > 1:
             post_lines.append(post_footer)
         else:
-            post_lines.append(post_nobody)
+            post_lines.append(post_nobody % week_str)
     else:
-        post_lines.append(post_nobody)
+        post_lines.append(post_nobody % week_str)
     message = '\n'.join(post_lines)
 
     if post_to_slack:
