@@ -36,21 +36,21 @@ base_dir = os.environ['HOME'] + appdir
 history_dir = base_dir + 'history/'
 #memberlist_file = 'memberlist.txt'
 ts_file = 'ts-relay'
-history_file_format = 'week-%d.txt' # week ID.
+history_file_format = 'week-{}.txt' # week ID.
 excluded_members_file = 'excluded_members.txt'
 weeks_str = ['今週', '来週', '再来週']
 post_format = {
-    'post_header_format' : '＊【%sのリレー投稿 担当者のお知らせ】＊',
-    'post_line_format' : '%d月%d日(%s)：<@%s> さん', # month, day, weekday, writer
-    'post_nobody' : '\n%sはお休みです。 :sleeping:', # week_str
+    'post_header_format' : '＊【{}のリレー投稿 担当者のお知らせ】＊',
+    'post_line_format' : '{}月{}日({})：<@{}> さん', # month, day, weekday, writer
+    'post_nobody' : '\n{}はお休みです。 :sleeping:', # week_str
     'post_footer' : '\nよろしくお願いします！ :sparkles:', # winner
 }
 post_format_reminder = {
-    'post_header_format' : '*【%sのリレー投稿 リマインダ】*',
+    'post_header_format' : '*【{}のリレー投稿 リマインダ】*',
 }
 post_format_list = {
-    'post_header_format' : '＊【リレー投稿 %s以降の順番予定】＊',
-    'post_line_format' : '<@%s> さん', # month, day, weekday, writer
+    'post_header_format' : '＊【リレー投稿 {}以降の順番予定】＊',
+    'post_line_format' : '<@{}> さん', # month, day, weekday, writer
 }
 
 def get_channel_list(client, limit=200):
@@ -142,7 +142,7 @@ if __name__ == '__main__':
     startday += datetime.timedelta((7-startday.weekday())%7)
     date_id = (startday-ADfirst).days
     week_id = date_id // 7
-    history_file_path = history_file_path_format % week_id
+    history_file_path = history_file_path_format.format(week_id)
 
     if args.list:
         args.reminder = False
@@ -163,7 +163,7 @@ if __name__ == '__main__':
     lastweek_id = 0
     for i in range(-lookback_weeks, 1):
         past_id = week_id + i
-        hf = history_file_path_format % past_id
+        hf = history_file_path_format.format(past_id)
         if os.path.exists(hf):
             lastweek_id = past_id
             with open(hf, 'r') as f:
@@ -188,7 +188,7 @@ if __name__ == '__main__':
     writers_dict = dict()
     if args.reminder:
         while week_id >= thisweek_id:
-            hf = history_file_path_format % week_id
+            hf = history_file_path_format.format(week_id)
             if os.path.exists(hf):
                 with open(hf, 'r') as f:
                     lines = f.readlines()
@@ -233,20 +233,20 @@ if __name__ == '__main__':
 
     if args.list: week_id = max(week_id, lastweek_id + 1)
     week_str = weeks_str[week_id - thisweek_id]
-    post_lines = [post_header_format % week_str]
+    post_lines = [post_header_format.format(week_str)]
     if writers_dict:
         for d, writer in writers_dict.items():
             if args.list:
-                post_lines.append(post_line_format % writer)
+                post_lines.append(post_line_format.format(writer))
             else:
                 date = startday + datetime.timedelta(d)
-                post_lines.append(post_line_format % (date.month, date.day, weekdays[d], writer))
+                post_lines.append(post_line_format.format(date.month, date.day, weekdays[d], writer))
         if len(post_lines) > 1:
             post_lines.append(post_footer)
         else:
-            post_lines.append(post_nobody % week_str)
+            post_lines.append(post_nobody.format(week_str))
     else:
-        post_lines.append(post_nobody % week_str)
+        post_lines.append(post_nobody.format(week_str))
     message = '\n'.join(post_lines)
 
     if post_to_slack:
