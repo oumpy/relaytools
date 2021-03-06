@@ -6,52 +6,47 @@ import os
 import datetime
 from slack import WebClient
 import argparse
-# from random import randrange
+import random
 from bisect import bisect_right
-import hashlib
-import jpholiday
 
-# Example:
-# python relayscheduler.py
-#
-
-post_to_slack = True
-# update_link = True
 slacktoken_file = 'slack_token'
 
-lookback_weeks = 8
-min_grace = 3 # days: 4の場合、木曜までなら翌週月曜から、それ以後なら翌々週。
-relaydays = [0, 1, 2, 3, 4] # cronとは曜日番号が違うので注意。
-# 平日に投稿、水曜に発表、月曜にリマインド、を想定。
-
-weekdays = ['月', '火', '水', '木', '金', '土', '日']
-custom_holidays = [(1,d) for d in range(1,4)] + [(12,d) for d in range(21,32)]
-# 12月21日から1月3日は休日扱い
+noactive_bound = datetime.timedelta(days=180)
+interval = datetime.timedelta(days=4)
+margin = datetime.timedelta(days=1)
+marginprob = 0.01
 
 excluded_members = set()
 
-channel_name = 'リレー投稿'
+channel_name = 'test1' # for logging. To disable, set to ''.
 appdir = '/var/relaytools/'
 base_dir = os.environ['HOME'] + appdir
-history_dir = base_dir + 'history/'
-#memberlist_file = 'memberlist.txt'
-ts_file = 'ts-relay'
-history_file_format = 'week-{}.txt' # week ID.
-excluded_members_file = 'excluded_members.txt'
-weeks_str = ['今週', '来週', '再来週']
-post_format = {
-    'post_header_format' : '＊【{}のリレー投稿 担当者のお知らせ】＊',
-    'post_line_format' : '{}月{}日({})：<@{}> さん', # month, day, weekday, writer
-    'post_nobody' : '\n{}はお休みです。 :sleeping:', # week_str
-    'post_footer' : '\nよろしくお願いします！ :sparkles:', # winner
-}
-post_format_reminder = {
-    'post_header_format' : '*【{}のリレー投稿 リマインダ】*',
-}
-post_format_list = {
-    'post_header_format' : '＊【リレー投稿 {}以降の順番予定】＊',
-    'post_line_format' : '<@{}> さん', # month, day, weekday, writer
-}
+presence_dir = base_dir + 'members_presence/'
+presence_file_format = '{}' # member ID.
+excluded_members_file = 'presence_excluded_members.txt'
+noactive_members_file = 'noactive_members.txt' # this file is updated automatically.
+
+ADfirst = datetime.datetime(1,1,1) # AD1.1.1 is Monday
+
+sleep_message = """
+ここしばらく、あたなの会Slackへの投稿やアクセスを確認できません。
+戻ってこられるまでの間、あなたを休眠会員として取り扱います。
+また会の活動に復帰していただけることをお待ちしています。
+"""
+wake_message = """
+おひさしぶりです！
+あなたはしばらく休眠会員となっていましたが、アクティブ会員に再登録されました。
+わからないことは何でも幹部にお尋ねください。
+よろしくお願いします！
+"""
+sleep_log_message = """
+<@{}> さんからのアクセスが長期間確認できません。
+休眠会員に指定します。
+"""
+wake_log_message = """
+<@{}> さんからのアクセスを久しぶりに確認しました。
+休眠会員の指定を解除します。
+"""
 
 def get_channel_list(client, limit=200):
     params = {
@@ -78,103 +73,38 @@ def get_channel_id(client, channel_name):
     else:
         return target['id']
 
-def next_writers(members, n, lastwriter):
-    def hashf(key):
-        return hashlib.sha256(key.encode()).hexdigest()
-    hashed_members = [ (hashf(m),m) for m in members ]
-    hashed_members.sort()
-    N = len(members)
-    hashed_lastwriter = (hashf(lastwriter), lastwriter)
-    s = bisect_right(hashed_members, hashed_lastwriter)
-    return [ hashed_members[(s+i) % N][1] for i in range(n) ]
-
-def to_be_skipped(year, month, day):
-    if not args.skipholiday:
-        return False
-    elif jpholiday.is_holiday(datetime.date(year, month, day)):
-        return True
-    elif (month, day) in custom_holidays:
-        return True
+def send_message(client, user, message):
+    params={
+        'channel': user,
+        'text': message,
+    }
+    response = client.api_call(
+        'chat.postMessage',
+        params=params
+    )
+    return response
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--noslack', help='do not post to slack.',
+    parser.add_argument('--updatealive', help='update the list of who are alive.',
                         action='store_true')
-    parser.add_argument('-r', '--reminder', help='remind.',
+    parser.add_argument('--checkpresence', help='check the current presences on Slack.',
                         action='store_true')
-    parser.add_argument('--mute', help='post in thread without showing on channel.',
-                        action='store_true')
-    parser.add_argument('--solopost',
-                        help='post an idependent message out of the thread, not destroying previous thread info',
-                        action='store_true')
-    parser.add_argument('--list', help='list the future orders.',
-                        action='store_true')
-    parser.add_argument('--skipholiday', help='skip holidays in Japan.',
+    parser.add_argument('--show', help='show the latest presences.',
                         action='store_true')
     parser.add_argument('-c', '--channel', default=channel_name,
-                        help='slack channel to read & post.')
-    parser.add_argument('-o', '--outchannel', default=None,
-                        help='slack channel to post.')
+                        help='slack channel to post. Default: \'{}\'.'.format(channel_name))
     parser.add_argument('--slacktoken', default=None,
                         help='slack bot token.')
-    parser.add_argument('--date', default=None,
-                        help='specify arbitrary date "yyyy-mm-dd" for test.')
     args = parser.parse_args()
 
-    if args.noslack:
-        post_to_slack = False
     channel_name = args.channel
 
-    # memberlist_file_path = base_dir + memberlist_file
     slacktoken_file_path = base_dir + slacktoken_file
-    history_file_path_format = history_dir + history_file_format
+    presence_file_path_format = presence_dir + presence_file_format
     excluded_members_file_path = base_dir + excluded_members_file
-
-    if args.date:
-        today = datetime.date.fromisoformat(args.date)
-    else:
-        today = datetime.date.today()
-    ADfirst = datetime.date(1,1,1) # AD1.1.1 is Monday
-    today_id = (today-ADfirst).days
-    thisweek_id = today_id // 7
-    startday = today + datetime.timedelta(min_grace)
-    startday += datetime.timedelta((7-startday.weekday())%7)
-    date_id = (startday-ADfirst).days
-    week_id = date_id // 7
-    history_file_path = history_file_path_format.format(week_id)
-
-    if args.list:
-        args.reminder = False
-    elif os.path.exists(history_file_path):
-        args.reminder = True
-    if args.reminder:
-        #update_link = False
-        for k, v in post_format_reminder.items():
-            post_format[k] = v
-    elif args.list:
-        for k, v in post_format_list.items():
-            post_format[k] = v
-    for k, v in post_format.items():
-        globals()[k] = v
-
-    # read the previous record
-    recent_writers = []
-    lastweek_id = 0
-    for i in range(-lookback_weeks, 1):
-        past_id = week_id + i
-        hf = history_file_path_format.format(past_id)
-        if os.path.exists(hf):
-            lastweek_id = past_id
-            with open(hf, 'r') as f:
-                lines = f.readlines()
-                for line in lines:
-                    date, person = line.rstrip().split()[:2]
-                    recent_writers.append(person)
-    if recent_writers:
-        last_writer = recent_writers[-1]
-    else:
-        last_writer = ''
+    noactive_members_file_path = base_dir + noactive_members_file
 
     if args.slacktoken:
         token = args.slacktoken
@@ -182,101 +112,75 @@ if __name__ == '__main__':
         with open(slacktoken_file_path, 'r') as f:
             token = f.readline().rstrip()
     web_client = WebClient(token=token)
-    channel_id = get_channel_id(web_client, channel_name)
-    my_id = web_client.api_call('auth.test')['user_id']
-
-    writers_dict = dict()
-    if args.reminder:
-        while week_id >= thisweek_id:
-            hf = history_file_path_format.format(week_id)
-            if os.path.exists(hf):
-                with open(hf, 'r') as f:
-                    lines = f.readlines()
-                    for line in lines:
-                        date, person = line.rstrip().split()[:2]
-                        date = int(date)
-                        writers_dict[date-date_id] = person
-                break
-            else:
-                week_id -= 1
-                date_id -= 7
-        else:
-            exit()
+    if channel_name:
+        channel_id = get_channel_id(web_client, channel_name)
     else:
-        if os.path.exists(excluded_members_file_path):
-            with open(excluded_members_file_path, 'r') as f:
-                lines = f.readlines()
-                for line in lines:
-                    excluded_members.add(line.rstrip().split()[1])
-        channel_members = web_client.api_call('conversations.members', params={'channel':channel_id})['members']
-        # ensure I am a member of the channel.
-        # channel_info = web_client.api_call('conversations.info', params={'channel':channel_id})['channel']
-        # if not channel_info['is_member']:
-        #     return
-        members = set(channel_members) - excluded_members
-        members.discard(my_id)
-        if args.list:
-            for d, writer in enumerate(next_writers(members, len(members), last_writer)):
-                writers_dict[d] = writer
-        else:
-            writers = next_writers(members, len(relaydays), last_writer)
-            i = 0
-            for d in relaydays:
-                date = startday + datetime.timedelta(d)
-                if not to_be_skipped(date.year, date.month, date.day):
-                    writers_dict[d] = writers[i]
-                    i += 1
-            # write the new history
-            with open(history_file_path, 'w') as f:
-                for d, u in writers_dict.items():
-                    print(date_id + d, u, file=f)
+        channel_id = ''
 
-    if args.list: week_id = max(week_id, lastweek_id + 1)
-    week_str = weeks_str[week_id - thisweek_id]
-    post_lines = [post_header_format.format(week_str)]
-    if writers_dict:
-        for d, writer in writers_dict.items():
-            if args.list:
-                post_lines.append(post_line_format.format(writer))
-            else:
-                date = startday + datetime.timedelta(d)
-                post_lines.append(post_line_format.format(date.month, date.day, weekdays[d], writer))
-        if len(post_lines) > 1:
-            post_lines.append(post_footer)
-        else:
-            post_lines.append(post_nobody.format(week_str))
-    else:
-        post_lines.append(post_nobody.format(week_str))
-    message = '\n'.join(post_lines)
+    if os.path.exists(excluded_members_file_path):
+        with open(excluded_members_file_path, 'r') as f:
+            lines = f.readlines()
+            for line in lines:
+                excluded_members.add(line.rstrip().split()[1])
+    all_members = web_client.api_call('users.list', params={})['members']
+    name = dict()
+    for member in all_members:
+        if bool(member['is_bot']):
+            excluded_members.add(member['id'])
+        name[member['id']] = member['profile']['display_name'] or member['profile']['real_name']
+    members = set([member['id'] for member in all_members if not bool(member['deleted'])]) - excluded_members
+    members_s = sorted(members)
 
-    if post_to_slack:
-        if args.outchannel:
-            channel_id = get_channel_id(web_client, args.outchannel)
-        params={
-            'channel': channel_id,
-            'text': message,
-        }
-        os.chdir(history_dir)
-        if os.path.isfile(ts_file):
-            with open(ts_file, 'r') as f:
-                ts = f.readline().rstrip()
-                if not args.solopost:
-                    params['thread_ts'] = ts
-                    if not args.mute:
-                        params['reply_broadcast'] = 'True'
+    last_stamp = dict()
+    has_history = defaultdict(bool)
+    for member_id in members:
+        presence_file_path = presence_file_path_format.format(member_id)
+        if os.path.exists(presence_file_path):
+            has_history[member_id] = True
+            with open(presence_file_path.format(member_id)) as f:
+                last_stamp[member_id] = datetime.datetime.fromisoformat(f.readlines()[-1].strip())
         else:
-            ts = None
-        response = web_client.api_call(
-            'chat.postMessage',
-            params=params
-        )
-        posted_data = response.data
-        if ts is None:
-            ts = posted_data['ts']
-            with open(ts_file, 'w') as f:
-                print(ts, file=f)
-        # elif os.path.isfile(ts_file):
-        #     os.remove(ts_file)
-    else:
-        print('App ID:', my_id)
-        print(message)
+            last_stamp[member_id] = ADfirst
+    now_t = datetime.datetime.now()
+    now_s = now_t.isoformat()
+
+    if args.checkpresence:
+#        print('checkpresence')
+        for member_id in members_s:
+            presence_file_path = presence_file_path_format.format(member_id)
+            noactiveterm = now_t - last_stamp[member_id]
+            if noactiveterm >= (interval + margin) or (noactiveterm >= interval and random.random() < marginprob):
+                activity = web_client.api_call('users.getPresence', params={'user':member_id})['presence']
+#                print(activity)
+                if activity == 'active':
+                    last_stamp[member_id] = now_t
+                    with open(presence_file_path, 'a') as f:
+                        print(now_s, file=f)
+
+    if args.show:
+        for member_id in members_s:
+            print(name[member_id], member_id, last_stamp[member_id].isoformat(), sep='\t')
+
+    if args.updatealive:
+        if os.path.exists(noactive_members_file_path):
+            with open(noactive_members_file_path) as f:
+                dead = set(map(lambda s: s.split('\t')[1].strip(), f.readlines()))
+        else:
+            dead = set()
+        dead &= members
+        for member_id in members_s:
+            if last_stamp[member_id] + noactive_bound > now_t: # alive
+                if member_id in prev_dead:
+                    send_message(web_client, member_id, wake_message)
+                    if channel_id:
+                        send_message(web_client, channel_id, wake_log_message.format(member_id))
+                    dead.remove(member_id)
+            elif has_history(member_id): # dead
+                if not member_id in dead:
+                    send_message(web_client, member_id, sleep_message)
+                    if channel_id:
+                        send_message(web_client, channel_id, sleep_log_message.format(member_id))
+                    dead.add(member_id)
+        with open(noactive_members_file_path, 'w') as f:
+            for dead_id in sorted(dead):
+                print(name[dead_id], dead_id, last_stamp[dead_id].isoformat(), sep='\t', file=f)
