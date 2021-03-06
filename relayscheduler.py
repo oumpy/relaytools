@@ -218,7 +218,7 @@ if __name__ == '__main__':
         # if not channel_info['is_member']:
         #     return
         members = set(channel_members) - excluded_members
-        members.discard(my_id)
+        # members.discard(my_id)
         if args.list:
             for d, writer in enumerate(next_writers(members, len(members), last_writer)):
                 writers_dict[d] = writer
