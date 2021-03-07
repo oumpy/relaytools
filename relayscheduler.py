@@ -218,7 +218,7 @@ if __name__ == '__main__':
                 with open(excluded_members_file_path, 'r') as f:
                     lines = f.readlines()
                     for line in lines:
-                        excluded_members.add(line.rstrip().split()[1])
+                        excluded_members.add(line.rstrip().split('\t')[1])
         channel_members = web_client.api_call('conversations.members', params={'channel':channel_id})['members']
         # ensure I am a member of the channel.
         # channel_info = web_client.api_call('conversations.info', params={'channel':channel_id})['channel']
