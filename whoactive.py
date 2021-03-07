@@ -16,7 +16,7 @@ interval = datetime.timedelta(days=3)
 margin = datetime.timedelta(hours=6)
 marginprob = 0.05
 
-excluded_members = set()
+excluded_members = {'USLACKBOT'}
 
 channel_name = 'test1' # for logging. To disable, set to ''.
 appdir = '/var/relaytools/'
