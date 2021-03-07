@@ -12,9 +12,9 @@ from bisect import bisect_right
 slacktoken_file = 'slack_token'
 
 noactive_bound = datetime.timedelta(days=180)
-interval = datetime.timedelta(days=4)
-margin = datetime.timedelta(days=1)
-marginprob = 0.01
+interval = datetime.timedelta(days=3)
+margin = datetime.timedelta(hours=6)
+marginprob = 0.05
 
 excluded_members = set()
 
