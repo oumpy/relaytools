@@ -147,13 +147,11 @@ if __name__ == '__main__':
     now_s = now_t.isoformat()
 
     if args.checkpresence:
-#        print('checkpresence')
         for member_id in members_s:
             presence_file_path = presence_file_path_format.format(member_id)
             noactiveterm = now_t - last_stamp[member_id]
             if noactiveterm >= (interval + margin) or (noactiveterm >= interval and random.random() < marginprob):
                 activity = web_client.api_call('users.getPresence', params={'user':member_id})['presence']
-#                print(activity)
                 if activity == 'active':
                     last_stamp[member_id] = now_t
                     with open(presence_file_path, 'a') as f:
