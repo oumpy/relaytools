@@ -93,6 +93,8 @@ if __name__ == '__main__':
                         action='store_true')
     parser.add_argument('--show', help='show the latest presences.',
                         action='store_true')
+    parser.add_argument('-n', '--notify', help='notify change of status to the people concerned.',
+                        action='store_true')
     parser.add_argument('-c', '--channel', default=channel_name,
                         help='slack channel to post. Default: \'{}\'.'.format(channel_name))
     parser.add_argument('--slacktoken', default=None,
@@ -171,14 +173,16 @@ if __name__ == '__main__':
         for member_id in members_s:
             if last_stamp[member_id] + noactive_bound > now_t: # alive
                 if member_id in prev_dead:
-                    post_message(web_client, member_id, wake_message)
-                    if channel_id:
+                    if wake_message and args.notify: 
+                        post_message(web_client, member_id, wake_message)
+                    if channel_id and wake_log_message:
                         post_message(web_client, channel_id, wake_log_message.format(member_id))
                     dead.remove(member_id)
             elif has_history(member_id): # dead
                 if not member_id in dead:
-                    post_message(web_client, member_id, sleep_message)
-                    if channel_id:
+                    if sleep_message and args.notify:
+                        post_message(web_client, member_id, sleep_message)
+                    if channel_id and sleep_log_message:
                         post_message(web_client, channel_id, sleep_log_message.format(member_id))
                     dead.add(member_id)
         with open(noactive_members_file_path, 'w') as f:
