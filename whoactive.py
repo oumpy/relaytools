@@ -73,9 +73,9 @@ def get_channel_id(client, channel_name):
     else:
         return target['id']
 
-def send_message(client, user, message):
+def post_message(client, channel, message):
     params={
-        'channel': user,
+        'channel': channel,
         'text': message,
     }
     response = client.api_call(
@@ -171,15 +171,15 @@ if __name__ == '__main__':
         for member_id in members_s:
             if last_stamp[member_id] + noactive_bound > now_t: # alive
                 if member_id in prev_dead:
-                    send_message(web_client, member_id, wake_message)
+                    post_message(web_client, member_id, wake_message)
                     if channel_id:
-                        send_message(web_client, channel_id, wake_log_message.format(member_id))
+                        post_message(web_client, channel_id, wake_log_message.format(member_id))
                     dead.remove(member_id)
             elif has_history(member_id): # dead
                 if not member_id in dead:
-                    send_message(web_client, member_id, sleep_message)
+                    post_message(web_client, member_id, sleep_message)
                     if channel_id:
-                        send_message(web_client, channel_id, sleep_log_message.format(member_id))
+                        post_message(web_client, channel_id, sleep_log_message.format(member_id))
                     dead.add(member_id)
         with open(noactive_members_file_path, 'w') as f:
             for dead_id in sorted(dead):
