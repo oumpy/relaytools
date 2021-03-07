@@ -11,25 +11,30 @@ from bisect import bisect_right
 
 slacktoken_file = 'slack_token'
 
-noactive_bound = datetime.timedelta(days=180)
+noactive_bound = datetime.timedelta(days=100)
+relayhistory_bound = datetime.timedelta(days=200)
 interval = datetime.timedelta(days=3)
 margin = datetime.timedelta(hours=6)
 marginprob = 0.05
 
 excluded_members = {'USLACKBOT'}
 
+relaychannel_name = 'リレー投稿'
 channel_name = 'test1' # for logging. To disable, set to ''.
 appdir = '/var/relaytools/'
 base_dir = os.environ['HOME'] + appdir
 presence_dir = base_dir + 'members_presence/'
+relayhistory_dir = base_dir + 'post_history/'
 presence_file_format = '{}' # member ID.
+relayhistory_file_format = '{}' # member ID.
 excluded_members_file = 'presence_excluded_members.txt'
 noactive_members_file = 'noactive_members.txt' # this file is updated automatically.
 
-ADfirst = datetime.datetime(1,1,1) # AD1.1.1 is Monday
+# ADfirst = datetime.datetime(1,1,1) # AD1.1.1 is Monday
+UNIXorigin = datetime.datetime(1970,1,1)
 
 sleep_message = """
-ここしばらく、あたなの会Slackへの投稿やアクセスを確認できません。
+ここしばらく、あたなの会Slackへのリレー投稿やアクセスを確認できません。
 戻ってこられるまでの間、あなたを休眠会員として取り扱います。
 また会の活動に復帰していただけることをお待ちしています。
 """
@@ -91,12 +96,20 @@ if __name__ == '__main__':
                         action='store_true')
     parser.add_argument('--checkpresence', help='check the current presences on Slack.',
                         action='store_true')
+    parser.add_argument('--checkrelay', help='check the relay posts on Slack.',
+                        action='store_true')
     parser.add_argument('--show', help='show the latest presences.',
+                        action='store_true')
+    parser.add_argument('--showrelay', help='show the latest relay-post time.',
+                        action='store_true')
+    parser.add_argument('--postlog', help='post logs of changes of status to the channel.',
                         action='store_true')
     parser.add_argument('-n', '--notify', help='notify change of status to the people concerned.',
                         action='store_true')
     parser.add_argument('-c', '--channel', default=channel_name,
                         help='slack channel to post. Default: \'{}\'.'.format(channel_name))
+    parser.add_argument('--relaychannel', default=relaychannel_name,
+                        help='slack relay-post channel. Default: \'{}\'.'.format(relaychannel_name))
     parser.add_argument('--slacktoken', default=None,
                         help='slack bot token.')
     args = parser.parse_args()
@@ -105,6 +118,7 @@ if __name__ == '__main__':
 
     slacktoken_file_path = base_dir + slacktoken_file
     presence_file_path_format = presence_dir + presence_file_format
+    relayhistory_file_path_format = relayhistory_dir + relayhistory_file_format
     excluded_members_file_path = base_dir + excluded_members_file
     noactive_members_file_path = base_dir + noactive_members_file
 
@@ -118,6 +132,7 @@ if __name__ == '__main__':
         channel_id = get_channel_id(web_client, channel_name)
     else:
         channel_id = ''
+    relaychannel_id = get_channel_id(web_client, relaychannel_name)
 
     if os.path.exists(excluded_members_file_path):
         with open(excluded_members_file_path, 'r') as f:
@@ -126,10 +141,12 @@ if __name__ == '__main__':
                 excluded_members.add(line.rstrip().split()[1])
     all_members = web_client.api_call('users.list', params={})['members']
     name = dict()
+    user_updated = dict()
     for member in all_members:
         if bool(member['is_bot']):
             excluded_members.add(member['id'])
         name[member['id']] = member['profile']['display_name'] or member['profile']['real_name']
+        user_updated[member['id']] = datetime.datetime.fromtimestamp(float(member['updated']))
     members = set([member['id'] for member in all_members if not bool(member['deleted'])]) - excluded_members
     members_s = sorted(members)
 
@@ -142,7 +159,7 @@ if __name__ == '__main__':
             with open(presence_file_path.format(member_id)) as f:
                 last_stamp[member_id] = datetime.datetime.fromisoformat(f.readlines()[-1].strip())
         else:
-            last_stamp[member_id] = ADfirst
+            last_stamp[member_id] = user_updated[member_id]
     now_t = datetime.datetime.now()
     now_s = now_t.isoformat()
 
@@ -157,9 +174,33 @@ if __name__ == '__main__':
                     with open(presence_file_path, 'a') as f:
                         print(now_s, file=f)
 
-    if args.show:
+    if args.checkrelay or args.showrelay or args.updatealive:
+        lastrelay = dict()
         for member_id in members_s:
-            print(name[member_id], member_id, last_stamp[member_id].isoformat(), sep='\t')
+            relayhistory_file_path = relayhistory_file_path_format.format(member_id)
+            if os.path.exists(relayhistory_file_path):
+                has_history[member_id] = True
+                with open(relayhistory_file_path.format(member_id)) as f:
+                    lastrelay[member_id] = datetime.datetime.fromisoformat(f.readlines()[-1].strip())
+            else:
+                lastrelay[member_id] = UNIXorigin
+        finalrelay = max(lastrelay.values())
+
+    if args.checkrelay:
+        params={
+            'channel': relaychannel_id,
+            'oldest': finalrelay.timestamp(),
+            'limit': '1000',
+        }
+        relay_messages = web_client.api_call('conversations.history', params=params)['messages']
+        for message in sorted(relay_messages, key=lambda x: float(x['ts'])):
+            if 'user' in message:
+                writer = message['user']
+                ts = datetime.datetime.fromtimestamp(float(message['ts']))
+                if writer in members and ts > lastrelay[writer]:
+                    lastrelay[writer] = ts
+                    with open(relayhistory_file_path_format.format(writer), 'a') as f:
+                        print(ts.isoformat(), file=f)
 
     if args.updatealive:
         if os.path.exists(noactive_members_file_path):
@@ -169,20 +210,28 @@ if __name__ == '__main__':
             dead = set()
         dead &= members
         for member_id in members_s:
-            if last_stamp[member_id] + noactive_bound > now_t: # alive
-                if member_id in prev_dead:
+            if last_stamp[member_id] + noactive_bound > now_t or lastrelay[member_id] + relayhistory_bound > now_t: # alive
+                if member_id in dead:
                     if wake_message and args.notify: 
                         post_message(web_client, member_id, wake_message)
-                    if channel_id and wake_log_message:
+                    if channel_id and wake_log_message and args.postlog:
                         post_message(web_client, channel_id, wake_log_message.format(member_id))
                     dead.remove(member_id)
-            elif has_history(member_id): # dead
+            else: # dead
                 if not member_id in dead:
                     if sleep_message and args.notify:
                         post_message(web_client, member_id, sleep_message)
-                    if channel_id and sleep_log_message:
+                    if channel_id and sleep_log_message and args.postlog:
                         post_message(web_client, channel_id, sleep_log_message.format(member_id))
                     dead.add(member_id)
         with open(noactive_members_file_path, 'w') as f:
             for dead_id in sorted(dead):
-                print(name[dead_id], dead_id, last_stamp[dead_id].isoformat(), sep='\t', file=f)
+                print(name[dead_id], dead_id, max(last_stamp[dead_id],lastrelay[dead_id]).isoformat(), sep='\t', file=f)
+
+    if args.show:
+        for member_id in members_s:
+            print(name[member_id], member_id, last_stamp[member_id].isoformat(), sep='\t')
+
+    if args.showrelay:
+        for member_id in members_s:
+            print(name[member_id], member_id, lastrelay[member_id].isoformat(), sep='\t')
