@@ -11,7 +11,7 @@ from bisect import bisect_right
 
 slacktoken_file = 'slack_token'
 
-noactive_bound = datetime.timedelta(days=100)
+inactive_bound = datetime.timedelta(days=100)
 relayhistory_bound = datetime.timedelta(days=200)
 interval = datetime.timedelta(days=3)
 margin = datetime.timedelta(hours=6)
@@ -28,7 +28,7 @@ relayhistory_dir = base_dir + 'post_history/'
 presence_file_format = '{}' # member ID.
 relayhistory_file_format = '{}' # member ID.
 excluded_members_file = 'presence_excluded_members.txt'
-noactive_members_file = 'noactive_members.txt' # this file is updated automatically.
+inactive_members_file = 'inactive_members.txt' # this file is updated automatically.
 
 # ADfirst = datetime.datetime(1,1,1) # AD1.1.1 is Monday
 UNIXorigin = datetime.datetime(1970,1,1)
@@ -120,7 +120,7 @@ if __name__ == '__main__':
     presence_file_path_format = presence_dir + presence_file_format
     relayhistory_file_path_format = relayhistory_dir + relayhistory_file_format
     excluded_members_file_path = base_dir + excluded_members_file
-    noactive_members_file_path = base_dir + noactive_members_file
+    inactive_members_file_path = base_dir + inactive_members_file
 
     if args.slacktoken:
         token = args.slacktoken
@@ -166,8 +166,8 @@ if __name__ == '__main__':
     if args.checkpresence:
         for member_id in members_s:
             presence_file_path = presence_file_path_format.format(member_id)
-            noactiveterm = now_t - last_stamp[member_id]
-            if noactiveterm >= (interval + margin) or (noactiveterm >= interval and random.random() < marginprob):
+            inactiveterm = now_t - last_stamp[member_id]
+            if inactiveterm >= (interval + margin) or (inactiveterm >= interval and random.random() < marginprob):
                 activity = web_client.api_call('users.getPresence', params={'user':member_id})['presence']
                 if activity == 'active':
                     last_stamp[member_id] = now_t
@@ -203,14 +203,14 @@ if __name__ == '__main__':
                         print(ts.isoformat(), file=f)
 
     if args.updatealive:
-        if os.path.exists(noactive_members_file_path):
-            with open(noactive_members_file_path) as f:
+        if os.path.exists(inactive_members_file_path):
+            with open(inactive_members_file_path) as f:
                 dead = set(map(lambda s: s.split('\t')[1].strip(), f.readlines()))
         else:
             dead = set()
         dead &= members
         for member_id in members_s:
-            if last_stamp[member_id] + noactive_bound > now_t or lastrelay[member_id] + relayhistory_bound > now_t: # alive
+            if last_stamp[member_id] + inactive_bound > now_t or lastrelay[member_id] + relayhistory_bound > now_t: # alive
                 if member_id in dead:
                     if wake_message and args.notify: 
                         post_message(web_client, member_id, wake_message)
@@ -224,7 +224,7 @@ if __name__ == '__main__':
                     if channel_id and sleep_log_message and args.postlog:
                         post_message(web_client, channel_id, sleep_log_message.format(member_id))
                     dead.add(member_id)
-        with open(noactive_members_file_path, 'w') as f:
+        with open(inactive_members_file_path, 'w') as f:
             for dead_id in sorted(dead):
                 print(name[dead_id], dead_id, max(last_stamp[dead_id],lastrelay[dead_id]).isoformat(), sep='\t', file=f)
 
