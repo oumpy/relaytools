@@ -175,7 +175,7 @@ if __name__ == '__main__':
     members = set([member['id'] for member in all_members if not bool(member['deleted'])]) - excluded_members
     members_s = sorted(members)
 
-    lastvisit = defaultdict(lambda x: user_updated[x])
+    lastvisit = dict()
     has_history = defaultdict(bool)
     for member_id in members:
         presence_file_path = presence_file_path_format.format(member_id)
@@ -183,6 +183,8 @@ if __name__ == '__main__':
             has_history[member_id] = True
             with open(presence_file_path.format(member_id)) as f:
                 lastvisit[member_id] = datetime.datetime.fromisoformat(f.readlines()[-1].strip())
+        else:
+            lastvisit[member_id] = user_updated[member_id]
     now_t = datetime.datetime.now()
     now_s = now_t.isoformat()
 
