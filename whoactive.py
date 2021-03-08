@@ -120,6 +120,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     channel_name = args.channel
+    relaychannel_name = args.relaychannel
 
     slacktoken_file_path = base_dir + slacktoken_file
     presence_file_path_format = presence_dir + presence_file_format
