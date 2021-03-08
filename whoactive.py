@@ -10,7 +10,8 @@ import random
 slacktoken_file = 'slack_token'
 
 inactive_bound = datetime.timedelta(days=100)
-relayhistory_bound = datetime.timedelta(days=200)
+norelay_bound = datetime.timedelta(days=200)
+membership_bound = datetime.timedelta(days=550)
 interval = datetime.timedelta(days=3)
 margin = datetime.timedelta(hours=6)
 marginprob = 0.05
@@ -50,11 +51,27 @@ wake_message = """\
 リレー投稿の巡回を再開します。わからないことは何でも幹部にお尋ねください。
 よろしくお願いします！"""
 
+die_message = """\
+<@{0}> さん
+
+会員に必須の活動であるリレー投稿を、規定の18ヶ月間以上、確認できません。
+会に留まることを希望される場合、指名に関わらず、すみやかにリレー投稿を行ってください。
+
+よろしくお願いいたします。"""
+
 sleep_log_message = """\
 <@{}> さんのリレー投稿・アクティブ状態を長期間確認できません。休眠会員に指定します。"""
 
 wake_log_message = """\
 <@{}> さんのアクセスを久しぶりに確認しました。休眠会員の指定を解除します。お帰りなさい！"""
+
+die_log_message = """\
+大変残念ですが、規定の18ヶ月間以上、 <@{0}> さんからのリレー投稿がありませんでした。
+
+幹部会は必要な対応を行ってください。
+<@{0}> さんは、会に留まることを希望される場合、指名に関わらず、すみやかにリレー投稿を行ってください。
+
+よろしくお願いいたします。"""
 
 def get_channel_list(client, limit=200):
     params = {
@@ -107,6 +124,8 @@ if __name__ == '__main__':
                         action='store_true')
     parser.add_argument('--postlog', help='post logs of changes of status to the channel.',
                         action='store_true')
+    parser.add_argument('--judgedead', help='make judgement of complete death.',
+                        action='store_true')
     parser.add_argument('-n', '--notify', help='notify change of status to the people concerned.',
                         action='store_true')
     parser.add_argument('-c', '--channel', default=channel_name,
@@ -146,12 +165,12 @@ if __name__ == '__main__':
             for line in lines:
                 excluded_members.add(line.rstrip().split()[1])
     all_members = web_client.api_call('users.list', params={})['members']
-    name = dict()
+    user_name = dict()
     user_updated = dict()
     for member in all_members:
         if bool(member['is_bot']):
             excluded_members.add(member['id'])
-        name[member['id']] = member['profile']['display_name'] or member['profile']['real_name']
+        user_name[member['id']] = member['profile']['display_name'] or member['profile']['real_name']
         user_updated[member['id']] = datetime.datetime.fromtimestamp(float(member['updated']))
     members = set([member['id'] for member in all_members if not bool(member['deleted'])]) - excluded_members
     members_s = sorted(members)
@@ -218,35 +237,48 @@ if __name__ == '__main__':
                         print(ts.isoformat(), file=f)
 
     if args.updatealive:
+        inactive = set()
+        inactive_level = defaultdict(int)
         if os.path.exists(inactive_members_file_path):
             with open(inactive_members_file_path) as f:
-                dead = set(map(lambda s: s.split('\t')[1].strip(), f.readlines()))
-        else:
-            dead = set()
-        dead &= members
+                for line in f.readlines():
+                    name, user, ts, level = (line.strip().split('\t') + ['1'])[:4]
+                    inactive.add(user)
+                    inactive_level[user] = int(level)
+        inactive &= members
         for member_id in members_s:
-            if lastvisit[member_id] + inactive_bound > now_t or lastrelay[member_id] + relayhistory_bound > now_t: # alive
-                if member_id in dead:
+            if args.judgedead and lastrelay[member_id] + membership_bound < now_t: # dead
+                if inactive_level[member_id] < 2:
+                    if die_message and args.notify:
+                        post_message(web_client, member_id, die_message.format(member_id))
+                    if channel_id and die_log_message and args.postlog:
+                        post_message(web_client, channel_id, die_log_message.format(member_id))
+                    inactive.add(member_id)
+                    inactive_level[member_id] = 2
+            elif lastvisit[member_id] + inactive_bound > now_t or lastrelay[member_id] + norelay_bound > now_t: # alive
+                if member_id in inactive:
                     if wake_message and args.notify: 
                         post_message(web_client, member_id, wake_message.format(member_id))
                     if channel_id and wake_log_message and args.postlog:
                         post_message(web_client, channel_id, wake_log_message.format(member_id))
-                    dead.remove(member_id)
-            else: # dead
-                if not member_id in dead:
+                    inactive.remove(member_id)
+                    inactive_level[member_id] = 0
+            else: # inactive
+                if not member_id in inactive:
                     if sleep_message and args.notify:
                         post_message(web_client, member_id, sleep_message.format(member_id))
                     if channel_id and sleep_log_message and args.postlog:
                         post_message(web_client, channel_id, sleep_log_message.format(member_id))
-                    dead.add(member_id)
+                    inactive.add(member_id)
+                    inactive_level[member_id] = 1
         with open(inactive_members_file_path, 'w') as f:
-            for dead_id in sorted(dead):
-                print(name[dead_id], dead_id, max(lastvisit[dead_id],lastrelay[dead_id]).isoformat(), sep='\t', file=f)
+            for inactive_id in sorted(inactive):
+                print(user_name[inactive_id], inactive_id, max(lastvisit[inactive_id],lastrelay[inactive_id]).isoformat(), inactive_level[inactive_id], sep='\t', file=f)
 
     if args.show:
         for member_id in members_s:
-            print(name[member_id], member_id, lastvisit[member_id].isoformat(), sep='\t')
+            print(user_name[member_id], member_id, lastvisit[member_id].isoformat(), sep='\t')
 
     if args.showrelay:
         for member_id in members_s:
-            print(name[member_id], member_id, lastrelay[member_id].isoformat(), sep='\t')
+            print(user_name[member_id], member_id, lastrelay[member_id].isoformat(), sep='\t')
