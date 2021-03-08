@@ -120,6 +120,8 @@ if __name__ == '__main__':
                         help='slack bot token.')
     parser.add_argument('--date', default=None,
                         help='specify arbitrary date "yyyy-mm-dd" for test.')
+    parser.add_argument('--exclude', default=None,
+                        help='specify an additional file or list/tuple of files, containing IDs to be excluded.')
     args = parser.parse_args()
 
     if args.noslack:
@@ -129,7 +131,15 @@ if __name__ == '__main__':
     # memberlist_file_path = base_dir + memberlist_file
     slacktoken_file_path = base_dir + slacktoken_file
     history_file_path_format = history_dir + history_file_format
-    excluded_members_file_path = base_dir + excluded_members_file
+    excluded_members_files = [excluded_members_file]
+    if args.exclude:
+        args.exclude = args.exclude.strip()
+        if args.exclude[0] in {'(', '['}:
+            args.exclude = args.exclude.lstrip('[').lstrip('(').rstrip(']').rstrip(')')
+            excluded_members_files += list(map(strip,args.exclude.split(',')))
+        elif args.exclude:
+            excluded_members_files.append(args.exclude)
+    excluded_members_file_paths = list(map(lambda x: base_dir + x, excluded_members_files))
 
     if args.date:
         today = datetime.date.fromisoformat(args.date)
@@ -203,11 +213,12 @@ if __name__ == '__main__':
         else:
             exit()
     else:
-        if os.path.exists(excluded_members_file_path):
-            with open(excluded_members_file_path, 'r') as f:
-                lines = f.readlines()
-                for line in lines:
-                    excluded_members.add(line.rstrip().split()[1])
+        for excluded_members_file_path in excluded_members_file_paths:
+            if os.path.exists(excluded_members_file_path):
+                with open(excluded_members_file_path, 'r') as f:
+                    lines = f.readlines()
+                    for line in lines:
+                        excluded_members.add(line.rstrip().split('\t')[1])
         channel_members = web_client.api_call('conversations.members', params={'channel':channel_id})['members']
         all_members = web_client.api_call('users.list', params={})['members']
         for member in all_members:
