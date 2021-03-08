@@ -110,6 +110,8 @@ if __name__ == '__main__':
                         help='slack channel to post. Default: \'{}\'.'.format(channel_name))
     parser.add_argument('--relaychannel', default=relaychannel_name,
                         help='slack relay-post channel. Default: \'{}\'.'.format(relaychannel_name))
+    parser.add_argument('--touch', default=None,
+                        help='record an access from the given user ID now.')
     parser.add_argument('--slacktoken', default=None,
                         help='slack bot token.')
     args = parser.parse_args()
@@ -162,6 +164,12 @@ if __name__ == '__main__':
             last_stamp[member_id] = user_updated[member_id]
     now_t = datetime.datetime.now()
     now_s = now_t.isoformat()
+
+    if args.touch in members:
+        presence_file_path = presence_file_path_format.format(args.touch)
+        last_stamp[args.touch] = now_t
+        with open(presence_file_path, 'a') as f:
+            print(now_s, file=f)
 
     if args.checkpresence:
         for member_id in members_s:
