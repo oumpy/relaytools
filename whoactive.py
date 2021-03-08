@@ -155,31 +155,31 @@ if __name__ == '__main__':
     members = set([member['id'] for member in all_members if not bool(member['deleted'])]) - excluded_members
     members_s = sorted(members)
 
-    last_stamp = defaultdict(lambda x: user_updated[x])
+    lastvisit = defaultdict(lambda x: user_updated[x])
     has_history = defaultdict(bool)
     for member_id in members:
         presence_file_path = presence_file_path_format.format(member_id)
         if os.path.exists(presence_file_path):
             has_history[member_id] = True
             with open(presence_file_path.format(member_id)) as f:
-                last_stamp[member_id] = datetime.datetime.fromisoformat(f.readlines()[-1].strip())
+                lastvisit[member_id] = datetime.datetime.fromisoformat(f.readlines()[-1].strip())
     now_t = datetime.datetime.now()
     now_s = now_t.isoformat()
 
     if args.touch in members:
         presence_file_path = presence_file_path_format.format(args.touch)
-        last_stamp[args.touch] = now_t
+        lastvisit[args.touch] = now_t
         with open(presence_file_path, 'a') as f:
             print(now_s, file=f)
 
     if args.checkpresence:
         for member_id in members_s:
             presence_file_path = presence_file_path_format.format(member_id)
-            inactiveterm = now_t - last_stamp[member_id]
+            inactiveterm = now_t - lastvisit[member_id]
             if inactiveterm >= (interval + margin) or (inactiveterm >= interval and random.random() < marginprob):
                 activity = web_client.api_call('users.getPresence', params={'user':member_id})['presence']
                 if activity == 'active':
-                    last_stamp[member_id] = now_t
+                    lastvisit[member_id] = now_t
                     with open(presence_file_path, 'a') as f:
                         print(now_s, file=f)
 
@@ -217,7 +217,7 @@ if __name__ == '__main__':
             dead = set()
         dead &= members
         for member_id in members_s:
-            if last_stamp[member_id] + inactive_bound > now_t or lastrelay[member_id] + relayhistory_bound > now_t: # alive
+            if lastvisit[member_id] + inactive_bound > now_t or lastrelay[member_id] + relayhistory_bound > now_t: # alive
                 if member_id in dead:
                     if wake_message and args.notify: 
                         post_message(web_client, member_id, wake_message.format(member_id))
@@ -233,11 +233,11 @@ if __name__ == '__main__':
                     dead.add(member_id)
         with open(inactive_members_file_path, 'w') as f:
             for dead_id in sorted(dead):
-                print(name[dead_id], dead_id, max(last_stamp[dead_id],lastrelay[dead_id]).isoformat(), sep='\t', file=f)
+                print(name[dead_id], dead_id, max(lastvisit[dead_id],lastrelay[dead_id]).isoformat(), sep='\t', file=f)
 
     if args.show:
         for member_id in members_s:
-            print(name[member_id], member_id, last_stamp[member_id].isoformat(), sep='\t')
+            print(name[member_id], member_id, lastvisit[member_id].isoformat(), sep='\t')
 
     if args.showrelay:
         for member_id in members_s:
