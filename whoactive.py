@@ -155,7 +155,7 @@ if __name__ == '__main__':
     members = set([member['id'] for member in all_members if not bool(member['deleted'])]) - excluded_members
     members_s = sorted(members)
 
-    last_stamp = dict()
+    last_stamp = defaultdict(lambda x: user_updated[x])
     has_history = defaultdict(bool)
     for member_id in members:
         presence_file_path = presence_file_path_format.format(member_id)
@@ -163,8 +163,6 @@ if __name__ == '__main__':
             has_history[member_id] = True
             with open(presence_file_path.format(member_id)) as f:
                 last_stamp[member_id] = datetime.datetime.fromisoformat(f.readlines()[-1].strip())
-        else:
-            last_stamp[member_id] = user_updated[member_id]
     now_t = datetime.datetime.now()
     now_s = now_t.isoformat()
 
@@ -186,15 +184,13 @@ if __name__ == '__main__':
                         print(now_s, file=f)
 
     if args.checkrelay or args.showrelay or args.updatealive:
-        lastrelay = dict()
+        lastrelay = defaultdict(lambda: UNIXorigin)
         for member_id in members_s:
             relayhistory_file_path = relayhistory_file_path_format.format(member_id)
             if os.path.exists(relayhistory_file_path):
                 has_history[member_id] = True
                 with open(relayhistory_file_path.format(member_id)) as f:
                     lastrelay[member_id] = datetime.datetime.fromisoformat(f.readlines()[-1].strip())
-            else:
-                lastrelay[member_id] = UNIXorigin
         finalrelay = max(lastrelay.values())
 
     if args.checkrelay:
