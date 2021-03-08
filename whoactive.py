@@ -33,25 +33,30 @@ inactive_members_file = 'inactive_members.txt' # this file is updated automatica
 # ADfirst = datetime.datetime(1,1,1) # AD1.1.1 is Monday
 UNIXorigin = datetime.datetime(1970,1,1)
 
-sleep_message = """
-ここしばらく、あたなの会Slackへのリレー投稿やアクセスを確認できません。
+sleep_message = """\
+<@{}> さん
+
+ここしばらく、あたなの会Slackへのリレー投稿や、アクティブなログイン状態を確認できません。
 戻ってこられるまでの間、あなたを休眠会員として取り扱います。
-また会の活動に復帰していただけることをお待ちしています。
-"""
-wake_message = """
+（長期にわたる場合、退会ご意向をお尋ねしたり推認させていただく場合があります。）
+
+会の活動にまた復帰していただけることをお待ちしています。"""
+
+wake_message = """\
+<@{}> さん
+
 おひさしぶりです！
-あなたはしばらく休眠会員となっていましたが、アクティブ会員に再登録されました。
-わからないことは何でも幹部にお尋ねください。
-よろしくお願いします！
-"""
-sleep_log_message = """
-<@{}> さんからのアクセスが長期間確認できません。
-休眠会員に指定します。
-"""
-wake_log_message = """
-<@{}> さんからのアクセスを久しぶりに確認しました。
-休眠会員の指定を解除します。
-"""
+あなたはしばらく休眠会員となっていましたが、ただいま指定を解除されました。
+戻ってきていただき、ありがとうございます。
+
+リレー投稿の巡回を再開します。わからないことは何でも幹部にお尋ねください。
+よろしくお願いします！"""
+
+sleep_log_message = """\
+<@{}> さんのリレー投稿・アクティブ状態を長期間確認できません。休眠会員に指定します。"""
+
+wake_log_message = """\
+<@{}> さんのアクセスを久しぶりに確認しました。休眠会員の指定を解除します。お帰りなさい！"""
 
 def get_channel_list(client, limit=200):
     params = {
@@ -221,14 +226,14 @@ if __name__ == '__main__':
             if last_stamp[member_id] + inactive_bound > now_t or lastrelay[member_id] + relayhistory_bound > now_t: # alive
                 if member_id in dead:
                     if wake_message and args.notify: 
-                        post_message(web_client, member_id, wake_message)
+                        post_message(web_client, member_id, wake_message.format(member_id))
                     if channel_id and wake_log_message and args.postlog:
                         post_message(web_client, channel_id, wake_log_message.format(member_id))
                     dead.remove(member_id)
             else: # dead
                 if not member_id in dead:
                     if sleep_message and args.notify:
-                        post_message(web_client, member_id, sleep_message)
+                        post_message(web_client, member_id, sleep_message.format(member_id))
                     if channel_id and sleep_log_message and args.postlog:
                         post_message(web_client, channel_id, sleep_log_message.format(member_id))
                     dead.add(member_id)
