@@ -185,13 +185,20 @@ if __name__ == '__main__':
                         print(now_s, file=f)
 
     if args.checkrelay or args.showrelay or args.updatealive:
-        lastrelay = defaultdict(lambda: UNIXorigin)
+        firstrelay = now_t
+        lastrelay = defaultdict(lambda: firstrelay)
         for member_id in members_s:
             relayhistory_file_path = relayhistory_file_path_format.format(member_id)
             if os.path.exists(relayhistory_file_path):
                 has_history[member_id] = True
                 with open(relayhistory_file_path.format(member_id)) as f:
-                    lastrelay[member_id] = datetime.datetime.fromisoformat(f.readlines()[-1].strip())
+                    series = f.readlines()
+                    if len(series):
+                        head, tail = series[0].strip(), series[-1].strip()
+                        lastrelay[member_id] = datetime.datetime.fromisoformat(tail)
+                        head_t = datetime.datetime.fromisoformat(head)
+                        if head_t < firstrelay:
+                            firstrelay = head_t
         finalrelay = max(lastrelay.values())
 
     if args.checkrelay:
