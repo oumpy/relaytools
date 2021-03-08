@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-import requests
 from collections import defaultdict
 import os
 import datetime
 from slack import WebClient
 import argparse
 import random
-from bisect import bisect_right
 
 slacktoken_file = 'slack_token'
 
