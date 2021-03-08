@@ -121,7 +121,7 @@ if __name__ == '__main__':
     parser.add_argument('--date', default=None,
                         help='specify arbitrary date "yyyy-mm-dd" for test.')
     parser.add_argument('--exclude', default=None,
-                        help='specify a file or list/tuple of files, containing IDs to be excluded.')
+                        help='specify an additional file or list/tuple of files, containing IDs to be excluded.')
     args = parser.parse_args()
 
     if args.noslack:
