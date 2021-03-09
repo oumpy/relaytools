@@ -6,6 +6,7 @@ import datetime
 from slack import WebClient
 import argparse
 import random
+import re
 
 slacktoken_file = 'slack_token'
 
@@ -107,6 +108,49 @@ def post_message(client, channel, message):
         params=params
     )
     return response
+
+def tail_b(filename, n=1):
+# ref: https://qiita.com/tomatoiscandy/items/02d5c656cc2faa7e35ad
+    if n == 1:
+        is_list = False
+    elif type(n) != int or n < 1:
+        raise ValueError('n has to be a positive integer')
+    else:
+        is_list = True
+
+    chunk_size = 64 * n
+    with open(filename, 'rb') as f:
+        f.readline()
+        left_end = f.tell() - 1
+        f.seek(-1, 2)
+        while True:
+            if f.read(1).strip() != b'':
+                right_end = f.tell()
+                break
+            f.seek(-2, 1)
+        unread = right_end - left_end
+        num_lines = 0
+        line = b''
+        while True:
+            if unread < chunk_size:
+                chunk_size = f.tell() - left_end
+            f.seek(-chunk_size, 1)
+            chunk = f.read(chunk_size)
+            line = chunk + line
+            f.seek(-chunk_size, 1)
+            unread -= chunk_size
+            if b'\n' in chunk:
+                num_lines += chunk.count(b'\n')
+                if num_lines >= n or not unread:
+                    leftmost_blank = re.search(rb'\r?\n', line)
+                    line = line[leftmost_blank.end():]
+                    line = line.decode()
+                    lines = re.split(r'\r?\n', line)
+                    result = [list(map(float, line.split(','))) for line in lines[-n:]]
+                    if not is_list:
+                        return result[-1]
+                    else:
+                        return result
 
 
 if __name__ == '__main__':
