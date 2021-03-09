@@ -26,9 +26,11 @@ logchannel_name = 'test1' # for logging. To disable, set to ''.
 appdir = '/var/relaytools/'
 base_dir = os.environ['HOME'] + appdir
 presence_dir = base_dir + 'members_presence/'
+posthistory_dir = base_dir + 'allpost_history/'
 relayhistory_dir = base_dir + 'relaypost_history/'
 presence_file_format = '{}' # member ID.
 relayhistory_file_format = '{}' # member ID.
+posthistory_file_format = '{}' # member ID.
 excluded_members_file = 'presence_excluded_members.txt'
 inactive_members_file = 'inactive_members.txt' # this file is updated automatically.
 
@@ -131,6 +133,8 @@ if __name__ == '__main__':
                         action='store_true')
     parser.add_argument('--checkpresence', help='check the current presences on Slack.',
                         action='store_true')
+    parser.add_argument('--checkpost', help='check the posts on Slack (all public channels).',
+                        action='store_true')
     parser.add_argument('--checkrelay', help='check the relay posts on Slack.',
                         action='store_true')
     parser.add_argument('--show', help='show the latest presences.',
@@ -158,6 +162,7 @@ if __name__ == '__main__':
 
     slacktoken_file_path = base_dir + slacktoken_file
     presence_file_path_format = presence_dir + presence_file_format
+    posthistory_file_path_format = posthistory_dir + posthistory_file_format
     relayhistory_file_path_format = relayhistory_dir + relayhistory_file_format
     excluded_members_file_path = base_dir + excluded_members_file
     inactive_members_file_path = base_dir + inactive_members_file
@@ -217,6 +222,21 @@ if __name__ == '__main__':
                     lastvisit[member_id] = now_t
                     with open(presence_file_path, 'a') as f:
                         print(now_s, file=f)
+
+    if args.checkpost or args.updatealive:
+        firstpost = now_t
+        lastpost = defaultdict(lambda: firstpost)
+        for member_id in members_s:
+            posthistory_file_path = posthistory_file_path_format.format(member_id)
+            if os.path.exists(posthistory_file_path):
+                with open(posthistory_file_path) as f:
+                    head = f.readline().strip()
+                    head_t = datetime.datetime.fromisoformat(head)
+                    if head_t < firstpost:
+                        firstpost = head_t
+                tail = file_tail(posthistory_file_path).strip()
+                lastpost[member_id] = datetime.datetime.fromisoformat(tail)
+        finalpost = max(lastpost.values())
 
     if args.checkrelay or args.showrelay or args.updatealive:
         firstrelay = now_t
