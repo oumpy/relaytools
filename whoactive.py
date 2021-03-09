@@ -226,11 +226,10 @@ if __name__ == '__main__':
     lastvisit = dict()
     # has_history = defaultdict(bool)
     for member_id in members:
-        presence_file_path = presence_file_path_format.format(member_id)
+        presence_file_path = presence_file_path_format.format(member_id).format(member_id)
         if os.path.exists(presence_file_path):
             # has_history[member_id] = True
-            with open(presence_file_path.format(member_id)) as f:
-                lastvisit[member_id] = datetime.datetime.fromisoformat(f.readlines()[-1].strip())
+            lastvisit[member_id] = datetime.datetime.fromisoformat(tail_b(presence_file_path).strip())
         else:
             lastvisit[member_id] = user_updated[member_id]
     now_t = datetime.datetime.now()
@@ -259,14 +258,13 @@ if __name__ == '__main__':
         for member_id in members_s:
             posthistory_file_path = posthistory_file_path_format.format(member_id)
             if os.path.exists(posthistory_file_path):
-                with open(posthistory_file_path.format(member_id)) as f:
-                    series = f.readlines()
-                    if len(series):
-                        head, tail = series[0].strip(), series[-1].strip()
-                        lastpost[member_id] = datetime.datetime.fromisoformat(tail)
-                        head_t = datetime.datetime.fromisoformat(head)
-                        if head_t < firstpost:
-                            firstpost = head_t
+                with open(posthistory_file_path) as f:
+                    head = f.readline().strip()
+                    head_t = datetime.datetime.fromisoformat(head)
+                    if head_t < firstpost:
+                        firstpost = head_t
+                tail = tail_b(posthistory_file_path).strip()
+                lastpost[member_id] = datetime.datetime.fromisoformat(tail)
         finalpost = max(lastpost.values())
 
     if args.checkrelay or args.showrelay or args.updatealive:
@@ -276,14 +274,13 @@ if __name__ == '__main__':
             relayhistory_file_path = relayhistory_file_path_format.format(member_id)
             if os.path.exists(relayhistory_file_path):
                 # has_history[member_id] = True
-                with open(relayhistory_file_path.format(member_id)) as f:
-                    series = f.readlines()
-                    if len(series):
-                        head, tail = series[0].strip(), series[-1].strip()
-                        lastrelay[member_id] = datetime.datetime.fromisoformat(tail)
-                        head_t = datetime.datetime.fromisoformat(head)
-                        if head_t < firstrelay:
-                            firstrelay = head_t
+                with open(relayhistory_file_path) as f:
+                    head = f.readline().strip()
+                    head_t = datetime.datetime.fromisoformat(head)
+                    if head_t < firstrelay:
+                        firstrelay = head_t
+                tail = tail_b(relayhistory_file_path).strip()
+                lastrelay[member_id] = datetime.datetime.fromisoformat(tail)
         finalrelay = max(lastrelay.values())
 
     if args.checkrelay:
