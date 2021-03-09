@@ -85,18 +85,17 @@ def get_channel_list(client, limit=200):
     else:
         return None
 
-def get_channel_id(client, channel_name):
-    channels = filter(lambda x: x['name']==channel_name , get_channel_list(client))
-    target = None
-    for c in channels:
-        if target is not None:
-            break
-        else:
-            target = c
-    if target is None:
-        return None
+def get_channel_id(client, channel_name, channels_list=None, update_channels=False):
+    if channels_list:
+        get_channel_id.channels_list = channels_list
+    if get_channel_id.channels_list is None or (update_channels and channels_list is not None):
+        get_channel_id.channels_list = get_channel_list(client)
+    channels = list(filter(lambda x: x['name']==channel_name , get_channel_id.channels_list))
+    if len(channels):
+        return channels[0]['id']
     else:
-        return target['id']
+        return None
+get_channel_id.channels_list = None
 
 def post_message(client, channel, message):
     params={
