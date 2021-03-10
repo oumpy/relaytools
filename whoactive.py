@@ -158,7 +158,7 @@ if __name__ == '__main__':
                         action='store_true')
     parser.add_argument('--checkpresence', help='check the current presences on Slack.',
                         action='store_true')
-    parser.add_argument('--checkposts', help='check the posts on Slack (all public channels).',
+    parser.add_argument('--checkpost', help='check the posts on Slack (all public channels).',
                         action='store_true')
     parser.add_argument('--checkrelay', help='check the relay posts on Slack.',
                         action='store_true')
@@ -250,7 +250,7 @@ if __name__ == '__main__':
                     with open(presence_file_path, 'a') as f:
                         print(now_s, file=f)
 
-    if args.checkposts or args.updatealive:
+    if args.checkpost or args.updatealive:
         firstpost = now_t
         lastpost = defaultdict(lambda: firstpost)
         for member_id in members_s:
