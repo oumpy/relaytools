@@ -6,6 +6,9 @@ import datetime
 from slack import WebClient
 import argparse
 import random
+import re
+import subprocess
+from subprocess import PIPE
 
 slacktoken_file = 'slack_token'
 
@@ -85,18 +88,17 @@ def get_channel_list(client, limit=200):
     else:
         return None
 
-def get_channel_id(client, channel_name):
-    channels = filter(lambda x: x['name']==channel_name , get_channel_list(client))
-    target = None
-    for c in channels:
-        if target is not None:
-            break
-        else:
-            target = c
-    if target is None:
-        return None
+def get_channel_id(client, channel_name, channels_list=None, update_channels=False):
+    if channels_list:
+        get_channel_id.channels_list = channels_list
+    if get_channel_id.channels_list is None or (update_channels and channels_list is not None):
+        get_channel_id.channels_list = get_channel_list(client)
+    channels = list(filter(lambda x: x['name']==channel_name , get_channel_id.channels_list))
+    if len(channels):
+        return channels[0]['id']
     else:
-        return target['id']
+        return None
+get_channel_id.channels_list = None
 
 def post_message(client, channel, message):
     params={
@@ -108,6 +110,22 @@ def post_message(client, channel, message):
         params=params
     )
     return response
+
+def file_tail(filename, n=None):
+    if n is None:
+        n = 1
+        is_list = False
+    elif type(n) != int or n < 1:
+        raise ValueError('n has to be a positive integer')
+    else:
+        is_list = True
+
+    proc = subprocess.run(['tail', '-{}'.format(n), filename], stdout=PIPE)
+    result = proc.stdout.decode().rstrip('\n').split('\n')
+    if is_list:
+        return result
+    else:
+        return result[0]
 
 
 if __name__ == '__main__':
@@ -178,11 +196,10 @@ if __name__ == '__main__':
     lastvisit = dict()
     has_history = defaultdict(bool)
     for member_id in members:
-        presence_file_path = presence_file_path_format.format(member_id)
+        presence_file_path = presence_file_path_format.format(member_id).format(member_id)
         if os.path.exists(presence_file_path):
             has_history[member_id] = True
-            with open(presence_file_path.format(member_id)) as f:
-                lastvisit[member_id] = datetime.datetime.fromisoformat(f.readlines()[-1].strip())
+            lastvisit[member_id] = datetime.datetime.fromisoformat(file_tail(presence_file_path).strip())
         else:
             lastvisit[member_id] = user_updated[member_id]
     now_t = datetime.datetime.now()
@@ -212,14 +229,13 @@ if __name__ == '__main__':
             relayhistory_file_path = relayhistory_file_path_format.format(member_id)
             if os.path.exists(relayhistory_file_path):
                 has_history[member_id] = True
-                with open(relayhistory_file_path.format(member_id)) as f:
-                    series = f.readlines()
-                    if len(series):
-                        head, tail = series[0].strip(), series[-1].strip()
-                        lastrelay[member_id] = datetime.datetime.fromisoformat(tail)
-                        head_t = datetime.datetime.fromisoformat(head)
-                        if head_t < firstrelay:
-                            firstrelay = head_t
+                with open(relayhistory_file_path) as f:
+                    head = f.readline().strip()
+                    head_t = datetime.datetime.fromisoformat(head)
+                    if head_t < firstrelay:
+                        firstrelay = head_t
+                tail = file_tail(relayhistory_file_path).strip()
+                lastrelay[member_id] = datetime.datetime.fromisoformat(tail)
         finalrelay = max(lastrelay.values())
 
     if args.checkrelay:
