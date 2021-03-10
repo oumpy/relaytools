@@ -109,7 +109,7 @@ def post_message(client, channel, message):
     )
     return response
 
-def tail_b(filename, n=1):
+def file_tail(filename, n=1):
 # ref: https://qiita.com/tomatoiscandy/items/02d5c656cc2faa7e35ad
     if n == 1:
         is_list = False
@@ -146,7 +146,7 @@ def tail_b(filename, n=1):
                     line = line[leftmost_blank.end():]
                     line = line.decode()
                     lines = re.split(r'\r?\n', line)
-                    result = [list(map(float, line.split(','))) for line in lines[-n:]]
+                    result = lines[-n:]
                     if not is_list:
                         return result[-1]
                     else:
@@ -224,7 +224,7 @@ if __name__ == '__main__':
         presence_file_path = presence_file_path_format.format(member_id).format(member_id)
         if os.path.exists(presence_file_path):
             has_history[member_id] = True
-            lastvisit[member_id] = datetime.datetime.fromisoformat(tail_b(presence_file_path).strip())
+            lastvisit[member_id] = datetime.datetime.fromisoformat(file_tail(presence_file_path).strip())
         else:
             lastvisit[member_id] = user_updated[member_id]
     now_t = datetime.datetime.now()
@@ -259,7 +259,7 @@ if __name__ == '__main__':
                     head_t = datetime.datetime.fromisoformat(head)
                     if head_t < firstrelay:
                         firstrelay = head_t
-                tail = tail_b(relayhistory_file_path).strip()
+                tail = file_tail(relayhistory_file_path).strip()
                 lastrelay[member_id] = datetime.datetime.fromisoformat(tail)
         finalrelay = max(lastrelay.values())
 
