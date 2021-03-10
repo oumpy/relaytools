@@ -228,11 +228,11 @@ if __name__ == '__main__':
             if os.path.exists(relayhistory_file_path):
                 has_history[member_id] = True
                 with open(relayhistory_file_path) as f:
-                    head = f.readline().strip()
+                    head = f.readline().strip().split('\t')[0]
                     head_t = datetime.datetime.fromisoformat(head)
                     if head_t < firstrelay:
                         firstrelay = head_t
-                tail = file_tail(relayhistory_file_path).strip()
+                tail = file_tail(relayhistory_file_path).strip().split('\t')[0]
                 tail_t = datetime.datetime.fromisoformat(tail)
                 lastrelay[member_id] = tail_t
         if lastrelay:
@@ -254,7 +254,7 @@ if __name__ == '__main__':
                 if writer in members and ts > lastrelay[writer]:
                     lastrelay[writer] = ts
                     with open(relayhistory_file_path_format.format(writer), 'a') as f:
-                        print(ts.isoformat(), file=f)
+                        print(ts.isoformat(), relaychannel_name, repr(message['text']), sep='\t', file=f)
 
     if args.updatealive:
         inactive = set()
