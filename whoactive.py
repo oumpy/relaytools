@@ -22,7 +22,7 @@ marginprob = 0.05
 excluded_members = {'USLACKBOT'}
 
 relaychannel_name = 'リレー投稿'
-channel_name = 'test1' # for logging. To disable, set to ''.
+logchannel_name = 'test1' # for logging. To disable, set to ''.
 appdir = '/var/relaytools/'
 base_dir = os.environ['HOME'] + appdir
 presence_dir = base_dir + 'members_presence/'
@@ -88,17 +88,14 @@ def get_channel_list(client, limit=200):
     else:
         return None
 
-def get_channel_id(client, channel_name, channels_list=None, update_channels=False):
-    if channels_list:
-        get_channel_id.channels_list = channels_list
-    if get_channel_id.channels_list is None or (update_channels and channels_list is not None):
-        get_channel_id.channels_list = get_channel_list(client)
-    channels = list(filter(lambda x: x['name']==channel_name , get_channel_id.channels_list))
+def get_channel_id(client, channel_name, channel_list=None):
+    if channel_list is None:
+        channel_list = get_channel_list(client)
+    channels = list(filter(lambda x: x['name']==channel_name , channel_list))
     if len(channels):
         return channels[0]['id']
     else:
         return None
-get_channel_id.channels_list = None
 
 def post_message(client, channel, message):
     params={
@@ -146,8 +143,8 @@ if __name__ == '__main__':
                         action='store_true')
     parser.add_argument('-n', '--notify', help='notify change of status to the people concerned.',
                         action='store_true')
-    parser.add_argument('-c', '--channel', default=channel_name,
-                        help='slack channel to post. Default: \'{}\'.'.format(channel_name))
+    parser.add_argument('-c', '--channel', default=logchannel_name,
+                        help='slack channel to post logs. Default: \'{}\'.'.format(logchannel_name))
     parser.add_argument('--relaychannel', default=relaychannel_name,
                         help='slack relay-post channel. Default: \'{}\'.'.format(relaychannel_name))
     parser.add_argument('--touch', default=None,
@@ -156,7 +153,7 @@ if __name__ == '__main__':
                         help='slack bot token.')
     args = parser.parse_args()
 
-    channel_name = args.channel
+    logchannel_name = args.channel
     relaychannel_name = args.relaychannel
 
     slacktoken_file_path = base_dir + slacktoken_file
@@ -171,11 +168,12 @@ if __name__ == '__main__':
         with open(slacktoken_file_path, 'r') as f:
             token = f.readline().rstrip()
     web_client = WebClient(token=token)
-    if channel_name:
-        channel_id = get_channel_id(web_client, channel_name)
+    channel_list = get_channel_list(web_client)
+    if logchannel_name:
+        logchannel_id = get_channel_id(None, logchannel_name, channel_list=channel_list)
     else:
-        channel_id = ''
-    relaychannel_id = get_channel_id(web_client, relaychannel_name)
+        logchannel_id = ''
+    relaychannel_id = get_channel_id(None, relaychannel_name, channel_list=channel_list)
 
     if os.path.exists(excluded_members_file_path):
         with open(excluded_members_file_path, 'r') as f:
@@ -269,24 +267,24 @@ if __name__ == '__main__':
                 if inactive_level[member_id] < 2:
                     if die_message and args.notify:
                         post_message(web_client, member_id, die_message.format(member_id))
-                    if channel_id and die_log_message and args.postlog:
-                        post_message(web_client, channel_id, die_log_message.format(member_id))
+                    if logchannel_id and die_log_message and args.postlog:
+                        post_message(web_client, logchannel_id, die_log_message.format(member_id))
                     inactive.add(member_id)
                     inactive_level[member_id] = 2
             elif lastvisit[member_id] + inactive_bound > now_t or lastrelay[member_id] + norelay_bound > now_t: # alive
                 if member_id in inactive:
                     if wake_message and args.notify: 
                         post_message(web_client, member_id, wake_message.format(member_id))
-                    if channel_id and wake_log_message and args.postlog:
-                        post_message(web_client, channel_id, wake_log_message.format(member_id))
+                    if logchannel_id and wake_log_message and args.postlog:
+                        post_message(web_client, logchannel_id, wake_log_message.format(member_id))
                     inactive.remove(member_id)
                     inactive_level[member_id] = 0
             else: # inactive
                 if not member_id in inactive:
                     if sleep_message and args.notify:
                         post_message(web_client, member_id, sleep_message.format(member_id))
-                    if channel_id and sleep_log_message and args.postlog:
-                        post_message(web_client, channel_id, sleep_log_message.format(member_id))
+                    if logchannel_id and sleep_log_message and args.postlog:
+                        post_message(web_client, logchannel_id, sleep_log_message.format(member_id))
                     inactive.add(member_id)
                     inactive_level[member_id] = 1
         with open(inactive_members_file_path, 'w') as f:
