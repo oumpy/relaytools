@@ -168,11 +168,12 @@ if __name__ == '__main__':
         with open(slacktoken_file_path, 'r') as f:
             token = f.readline().rstrip()
     web_client = WebClient(token=token)
+    channel_list = get_channel_list(web_client)
     if channel_name:
-        channel_id = get_channel_id(web_client, channel_name)
+        channel_id = get_channel_id(None, channel_name, channel_list=channel_list)
     else:
         channel_id = ''
-    relaychannel_id = get_channel_id(web_client, relaychannel_name)
+    relaychannel_id = get_channel_id(None, relaychannel_name, channel_list=channel_list)
 
     if os.path.exists(excluded_members_file_path):
         with open(excluded_members_file_path, 'r') as f:
