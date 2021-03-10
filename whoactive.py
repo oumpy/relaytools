@@ -169,10 +169,10 @@ if __name__ == '__main__':
             token = f.readline().rstrip()
     web_client = WebClient(token=token)
     channel_list = get_channel_list(web_client)
-    if logchannel_name:
-        logchannel_id = get_channel_id(None, logchannel_name, channel_list=channel_list)
+    if channel_name:
+        channel_id = get_channel_id(None, channel_name, channel_list=channel_list)
     else:
-        logchannel_id = ''
+        channel_id = ''
     relaychannel_id = get_channel_id(None, relaychannel_name, channel_list=channel_list)
 
     if os.path.exists(excluded_members_file_path):
