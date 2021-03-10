@@ -259,6 +259,26 @@ if __name__ == '__main__':
         else:
             finalrelay = firstrelay = UNIXorigin
 
+    if args.checkpost: # access to all channels. Tier3 API is called repeatedly (i.e., 20 times).
+        for channel in channel_list:
+            params={
+                'channel': channel['id'],
+                'oldest': finalpost.timestamp(),
+                'limit': '1000',
+            }
+            post_messages = web_client.api_call('conversations.history', params=params)['messages']
+            for message in sorted(post_messages, key=lambda x: float(x['ts'])):
+                if 'user' in message:
+                    writer = message['user']
+                    if writer in members:
+                        ts = datetime.datetime.fromtimestamp(float(message['ts']))
+                        if ts > lastpost[writer]:
+                            lastpost[writer] = ts
+                            with open(posthistory_file_path_format.format(writer), 'a') as f:
+                                print(ts.isoformat(), file=f)
+                        if ts > lastvisit[writer]:
+                            lastvisit[writer] = ts
+
     if args.checkrelay:
         params={
             'channel': relaychannel_id,
