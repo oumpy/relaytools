@@ -233,8 +233,12 @@ if __name__ == '__main__':
                     if head_t < firstrelay:
                         firstrelay = head_t
                 tail = file_tail(relayhistory_file_path).strip()
-                lastrelay[member_id] = datetime.datetime.fromisoformat(tail)
-        finalrelay = max(lastrelay.values())
+                tail_t = datetime.datetime.fromisoformat(tail)
+                lastrelay[member_id] = tail_t
+        if lastrelay:
+            finalrelay = max(lastrelay.values())
+        else:
+            finalrelay = UNIXorigin
 
     if args.checkrelay:
         params={
