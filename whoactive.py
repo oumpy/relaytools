@@ -231,11 +231,12 @@ if __name__ == '__main__':
             if os.path.exists(posthistory_file_path):
                 with open(posthistory_file_path) as f:
                     head = f.readline().strip()
-                    head_t = datetime.datetime.fromisoformat(head)
+                    head_t = datetime.datetime.fromisoformat(head).split('\t')[0]
                     if head_t < firstpost:
                         firstpost = head_t
-                tail = file_tail(posthistory_file_path).strip()
-                lastpost[member_id] = datetime.datetime.fromisoformat(tail)
+                tail = file_tail(posthistory_file_path).strip().split('\t')[0]
+                tail_t = datetime.datetime.fromisoformat(tail)
+                lastpost[member_id] = tail_t
         finalpost = max(lastpost.values())
 
     if args.checkrelay or args.showrelay or args.updatealive:
@@ -260,6 +261,7 @@ if __name__ == '__main__':
             finalrelay = firstrelay = UNIXorigin
 
     if args.checkpost: # access to all channels. Tier3 API is called repeatedly (i.e., 20 times).
+        records = defaultdict(set())
         for channel in channel_list:
             params={
                 'channel': channel['id'],
@@ -274,10 +276,13 @@ if __name__ == '__main__':
                         ts = datetime.datetime.fromtimestamp(float(message['ts']))
                         if ts > lastpost[writer]:
                             lastpost[writer] = ts
-                            with open(posthistory_file_path_format.format(writer), 'a') as f:
-                                print(ts.isoformat(), file=f)
+                            records[writer].add((ts, channel['name'], repr(message['text'])))
                         if ts > lastvisit[writer]:
                             lastvisit[writer] = ts
+        for writer in sorted(records):
+            with open(posthistory_file_path_format.format(writer), 'a') as f:
+                for ts, ch, msg in sorted(records[writer]):
+                    print(ts.isoformat(), ch, msg, sep='\t', file=f)
 
     if args.checkrelay:
         params={
