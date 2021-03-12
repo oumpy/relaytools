@@ -238,7 +238,7 @@ if __name__ == '__main__':
         if lastrelay:
             finalrelay = max(lastrelay.values())
         else:
-            finalrelay = UNIXorigin
+            finalrelay = firstrelay = UNIXorigin
 
     if args.checkrelay:
         params={
