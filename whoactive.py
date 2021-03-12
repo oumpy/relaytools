@@ -26,7 +26,7 @@ logchannel_name = 'test1' # for logging. To disable, set to ''.
 appdir = '/var/relaytools/'
 base_dir = os.environ['HOME'] + appdir
 presence_dir = base_dir + 'members_presence/'
-relayhistory_dir = base_dir + 'post_history/'
+relayhistory_dir = base_dir + 'relaypost_history/'
 presence_file_format = '{}' # member ID.
 relayhistory_file_format = '{}' # member ID.
 excluded_members_file = 'presence_excluded_members.txt'
@@ -228,13 +228,17 @@ if __name__ == '__main__':
             if os.path.exists(relayhistory_file_path):
                 has_history[member_id] = True
                 with open(relayhistory_file_path) as f:
-                    head = f.readline().strip()
+                    head = f.readline().strip().split('\t')[0]
                     head_t = datetime.datetime.fromisoformat(head)
                     if head_t < firstrelay:
                         firstrelay = head_t
-                tail = file_tail(relayhistory_file_path).strip()
-                lastrelay[member_id] = datetime.datetime.fromisoformat(tail)
-        finalrelay = max(lastrelay.values())
+                tail = file_tail(relayhistory_file_path).strip().split('\t')[0]
+                tail_t = datetime.datetime.fromisoformat(tail)
+                lastrelay[member_id] = tail_t
+        if lastrelay:
+            finalrelay = max(lastrelay.values())
+        else:
+            finalrelay = UNIXorigin
 
     if args.checkrelay:
         params={
@@ -250,7 +254,7 @@ if __name__ == '__main__':
                 if writer in members and ts > lastrelay[writer]:
                     lastrelay[writer] = ts
                     with open(relayhistory_file_path_format.format(writer), 'a') as f:
-                        print(ts.isoformat(), file=f)
+                        print(ts.isoformat(), relaychannel_name, repr(message['text']), sep='\t', file=f)
 
     if args.updatealive:
         inactive = set()
