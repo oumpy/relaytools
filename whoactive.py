@@ -192,11 +192,9 @@ if __name__ == '__main__':
     members_s = sorted(members)
 
     lastvisit = dict()
-    has_history = defaultdict(bool)
     for member_id in members:
         presence_file_path = presence_file_path_format.format(member_id).format(member_id)
         if os.path.exists(presence_file_path):
-            has_history[member_id] = True
             lastvisit[member_id] = datetime.datetime.fromisoformat(file_tail(presence_file_path).strip())
         else:
             lastvisit[member_id] = user_updated[member_id]
@@ -226,7 +224,6 @@ if __name__ == '__main__':
         for member_id in members_s:
             relayhistory_file_path = relayhistory_file_path_format.format(member_id)
             if os.path.exists(relayhistory_file_path):
-                has_history[member_id] = True
                 with open(relayhistory_file_path) as f:
                     head = f.readline().strip().split('\t')[0]
                     head_t = datetime.datetime.fromisoformat(head)
@@ -252,7 +249,6 @@ if __name__ == '__main__':
                 writer = message['user']
                 ts = datetime.datetime.fromtimestamp(float(message['ts']))
                 if writer in members:
-                    lastrelay[writer] = ts
                     if 'thread_ts' in message:
                         thread_ts_t = datetime.datetime.fromtimestamp(float(message['thread_ts']))
                         thread_ts_s = thread_ts_t.isoformat()
@@ -263,6 +259,8 @@ if __name__ == '__main__':
                     else:
                         thread_ts_s = ''
                         appearance = 'broadcast'
+                    if appearance == 'broadcast':
+                        lastrelay[writer] = ts
                     with open(relayhistory_file_path_format.format(writer), 'a') as f:
                         print(ts.isoformat(), relaychannel_name, appearance, thread_ts_s, repr(message['text']), sep='\t', file=f)
 
