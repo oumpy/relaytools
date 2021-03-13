@@ -225,13 +225,15 @@ if __name__ == '__main__':
             relayhistory_file_path = relayhistory_file_path_format.format(member_id)
             if os.path.exists(relayhistory_file_path):
                 with open(relayhistory_file_path) as f:
-                    head = f.readline().strip().split('\t')[0]
+                    lines = list(filter(lambda x: x.split('\t')[2]=='broadcast', f.readlines()))
+                if lines:
+                    head = lines[0].strip().split('\t')[0]
                     head_t = datetime.datetime.fromisoformat(head)
                     if head_t < firstrelay:
                         firstrelay = head_t
-                tail = file_tail(relayhistory_file_path).strip().split('\t')[0]
-                tail_t = datetime.datetime.fromisoformat(tail)
-                lastrelay[member_id] = tail_t
+                    tail = lines[-1].strip().split('\t')[0]
+                    tail_t = datetime.datetime.fromisoformat(tail)
+                    lastrelay[member_id] = tail_t
         if lastrelay:
             finalrelay = max(lastrelay.values())
         else:
