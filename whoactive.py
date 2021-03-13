@@ -254,11 +254,17 @@ if __name__ == '__main__':
                 if writer in members and ts > lastrelay[writer]:
                     lastrelay[writer] = ts
                     if 'thread_ts' in message:
-                        thread = datetime.datetime.fromtimestamp(float(message['thread_ts'])).isoformat()
+                        thread_ts_t = datetime.datetime.fromtimestamp(float(message['thread_ts']))
+                        thread_ts_s = thread_ts_t.isoformat()
+                        if thread_ts_t==ts or ('subtype' in message and message['subtype']=='thread_broadcast'):
+                            appearance = 'broadcast'
+                        else:
+                            appearance = 'thread'
                     else:
-                        thread = ''
+                        thread_ts_s = ''
+                        appearance = 'broadcast'
                     with open(relayhistory_file_path_format.format(writer), 'a') as f:
-                        print(ts.isoformat(), relaychannel_name, thread, repr(message['text']), sep='\t', file=f)
+                        print(ts.isoformat(), relaychannel_name, appearance, thread_ts_s, repr(message['text']), sep='\t', file=f)
 
     if args.updatealive:
         inactive = set()
