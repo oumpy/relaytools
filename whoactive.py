@@ -251,7 +251,7 @@ if __name__ == '__main__':
             if 'user' in message:
                 writer = message['user']
                 ts = datetime.datetime.fromtimestamp(float(message['ts']))
-                if writer in members and ts > lastrelay[writer]:
+                if writer in members:
                     lastrelay[writer] = ts
                     if 'thread_ts' in message:
                         thread_ts_t = datetime.datetime.fromtimestamp(float(message['thread_ts']))
