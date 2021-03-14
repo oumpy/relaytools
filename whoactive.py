@@ -232,8 +232,8 @@ if __name__ == '__main__':
             posthistory_file_path = posthistory_file_path_format.format(member_id)
             if os.path.exists(posthistory_file_path):
                 with open(posthistory_file_path) as f:
-                    head = f.readline().strip()
-                    head_t = datetime.datetime.fromisoformat(head).split('\t')[0]
+                    head = f.readline().strip().split('\t')[0]
+                    head_t = datetime.datetime.fromisoformat(head)[0]
                     if head_t < firstpost:
                         firstpost = head_t
                 tail = file_tail(posthistory_file_path).strip().split('\t')[0]
