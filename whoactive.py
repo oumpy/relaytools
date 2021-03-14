@@ -279,6 +279,7 @@ if __name__ == '__main__':
                 continue
             if not bool(conversations_history['ok']):
                 continue
+            print(channel['name'])
             post_messages = conversations_history['messages']
             for message in sorted(post_messages, key=lambda x: float(x['ts'])):
                 if 'user' in message:
@@ -287,6 +288,7 @@ if __name__ == '__main__':
                         ts = datetime.datetime.fromtimestamp(float(message['ts']))
                         if 'thread_ts' in message:
                             thread_ts_t = datetime.datetime.fromtimestamp(float(message['thread_ts']))
+                            thread_ts_s = thread_ts_t.isoformat()
                             if thread_ts_t==ts or ('subtype' in message and message['subtype']=='thread_broadcast'):
                                 appearance = 'broadcast'
                             else:
@@ -298,11 +300,11 @@ if __name__ == '__main__':
                             lastpost[writer] = ts
                         if ts > lastvisit[writer]:
                             lastvisit[writer] = ts
-                        records[writer].append((ts, channel['name'], appearance, thread_ts_t,repr(message['text'])))
+                        records[writer].append((ts, channel['name'], appearance, thread_ts_s, repr(message['text'])))
         for writer in sorted(records):
             with open(posthistory_file_path_format.format(writer), 'a') as f:
-                for ts, ch, ap, th_ts, msg in sorted(records[writer]):
-                    print(ts.isoformat(), ch, ap, th_ts.isoformat(), msg, sep='\t', file=f)
+                for ts, ch, ap, th_ts_s, msg in sorted(records[writer]):
+                    print(ts.isoformat(), ch, ap, th_ts_s, msg, sep='\t', file=f)
 
     if args.checkrelay:
         params={
