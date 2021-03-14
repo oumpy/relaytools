@@ -139,6 +139,8 @@ if __name__ == '__main__':
                         action='store_true')
     parser.add_argument('--show', help='show the latest presences.',
                         action='store_true')
+    parser.add_argument('--showpost', help='show the latest all-post time.',
+                        action='store_true')
     parser.add_argument('--showrelay', help='show the latest relay-post time.',
                         action='store_true')
     parser.add_argument('--postlog', help='post logs of changes of status to the channel.',
@@ -223,7 +225,7 @@ if __name__ == '__main__':
                     with open(presence_file_path, 'a') as f:
                         print(now_s, file=f)
 
-    if args.checkpost or args.updatealive:
+    if args.checkpost or args.showpost or args.updatealive:
         firstpost = now_t
         lastpost = defaultdict(lambda: firstpost)
         for member_id in members_s:
@@ -365,6 +367,10 @@ if __name__ == '__main__':
     if args.show:
         for member_id in members_s:
             print(user_name[member_id], member_id, lastvisit[member_id].isoformat(), sep='\t')
+
+    if args.showpost:
+        for member_id in members_s:
+            print(user_name[member_id], member_id, lastpost[member_id].isoformat(), sep='\t')
 
     if args.showrelay:
         for member_id in members_s:
