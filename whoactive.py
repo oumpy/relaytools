@@ -297,7 +297,7 @@ if __name__ == '__main__':
                     continue
             if not bool(conversations_history['ok']):
                 continue
-            print(channel['name'])
+            # print(channel['name'])
             post_messages = sorted(conversations_history['messages'], key=lambda x: float(x['ts']))
             for message in post_messages:
                 if 'user' in message:
