@@ -266,7 +266,7 @@ if __name__ == '__main__':
             finalrelay = firstrelay = UNIXorigin
 
     if args.checkpost: # access to all channels. Tier3 API is called repeatedly (i.e., 20 times).
-        records = defaultdict(set())
+        records = defaultdict(list)
         for channel in channel_list:
             params={
                 'channel': channel['id'],
@@ -292,7 +292,7 @@ if __name__ == '__main__':
                             lastpost[writer] = ts
                         if ts > lastvisit[writer]:
                             lastvisit[writer] = ts
-                        records[writer].add((ts, channel['name'], appearance, thread_ts_t,repr(message['text'])))
+                        records[writer].append((ts, channel['name'], appearance, thread_ts_t,repr(message['text'])))
         for writer in sorted(records):
             with open(posthistory_file_path_format.format(writer), 'a') as f:
                 for ts, ch, ap, th_ts, msg in sorted(records[writer]):
