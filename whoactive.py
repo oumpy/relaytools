@@ -137,7 +137,7 @@ if __name__ == '__main__':
                         action='store_true')
     parser.add_argument('--checkrelay', help='check the relay posts on Slack.',
                         action='store_true')
-    parser.add_argument('--show', help='show the latest presences.',
+    parser.add_argument('--showpresence', help='show the latest presences.',
                         action='store_true')
     parser.add_argument('--showpost', help='show the latest all-post time.',
                         action='store_true')
@@ -364,7 +364,7 @@ if __name__ == '__main__':
             for inactive_id in sorted(inactive):
                 print(user_name[inactive_id], inactive_id, max(lastvisit[inactive_id],lastrelay[inactive_id]).isoformat(), inactive_level[inactive_id], sep='\t', file=f)
 
-    if args.show:
+    if args.showpresence:
         for member_id in members_s:
             print(user_name[member_id], member_id, lastvisit[member_id].isoformat(), sep='\t')
 
