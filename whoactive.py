@@ -85,7 +85,7 @@ def get_channel_list(client, limit=200):
         'limit': str(limit),
         }
     channels = client.api_call('conversations.list', params=params)
-    if channels['ok']:
+    if bool(channels['ok']):
         return channels['channels']
     else:
         return None
@@ -233,7 +233,7 @@ if __name__ == '__main__':
             if os.path.exists(posthistory_file_path):
                 with open(posthistory_file_path) as f:
                     head = f.readline().strip().split('\t')[0]
-                    head_t = datetime.datetime.fromisoformat(head)[0]
+                    head_t = datetime.datetime.fromisoformat(head)
                     if head_t < firstpost:
                         firstpost = head_t
                 tail = file_tail(posthistory_file_path).strip().split('\t')[0]
