@@ -26,9 +26,11 @@ logchannel_name = 'test1' # for logging. To disable, set to ''.
 appdir = '/var/relaytools/'
 base_dir = os.environ['HOME'] + appdir
 presence_dir = base_dir + 'members_presence/'
+posthistory_dir = base_dir + 'allpost_history/'
 relayhistory_dir = base_dir + 'relaypost_history/'
 presence_file_format = '{}' # member ID.
 relayhistory_file_format = '{}' # member ID.
+posthistory_file_format = '{}' # member ID.
 excluded_members_file = 'presence_excluded_members.txt'
 inactive_members_file = 'inactive_members.txt' # this file is updated automatically.
 
@@ -131,9 +133,13 @@ if __name__ == '__main__':
                         action='store_true')
     parser.add_argument('--checkpresence', help='check the current presences on Slack.',
                         action='store_true')
+    parser.add_argument('--checkpost', help='check the posts on Slack (all public channels).',
+                        action='store_true')
     parser.add_argument('--checkrelay', help='check the relay posts on Slack.',
                         action='store_true')
-    parser.add_argument('--show', help='show the latest presences.',
+    parser.add_argument('--showpresence', help='show the latest presences.',
+                        action='store_true')
+    parser.add_argument('--showpost', help='show the latest all-post time.',
                         action='store_true')
     parser.add_argument('--showrelay', help='show the latest relay-post time.',
                         action='store_true')
@@ -158,6 +164,7 @@ if __name__ == '__main__':
 
     slacktoken_file_path = base_dir + slacktoken_file
     presence_file_path_format = presence_dir + presence_file_format
+    posthistory_file_path_format = posthistory_dir + posthistory_file_format
     relayhistory_file_path_format = relayhistory_dir + relayhistory_file_format
     excluded_members_file_path = base_dir + excluded_members_file
     inactive_members_file_path = base_dir + inactive_members_file
@@ -218,6 +225,25 @@ if __name__ == '__main__':
                     with open(presence_file_path, 'a') as f:
                         print(now_s, file=f)
 
+    if args.checkpost or args.showpost or args.updatealive:
+        firstpost = now_t
+        lastpost = defaultdict(lambda: firstpost)
+        for member_id in members_s:
+            posthistory_file_path = posthistory_file_path_format.format(member_id)
+            if os.path.exists(posthistory_file_path):
+                with open(posthistory_file_path) as f:
+                    head = f.readline().strip()
+                    head_t = datetime.datetime.fromisoformat(head).split('\t')[0]
+                    if head_t < firstpost:
+                        firstpost = head_t
+                tail = file_tail(posthistory_file_path).strip().split('\t')[0]
+                tail_t = datetime.datetime.fromisoformat(tail)
+                lastpost[member_id] = tail_t
+        if lastpost:
+            finalpost = max(lastpost.values())
+        else:
+            finalpost = firstpost = UNIXorigin
+
     if args.checkrelay or args.showrelay or args.updatealive:
         firstrelay = now_t
         lastrelay = defaultdict(lambda: firstrelay)
@@ -238,6 +264,39 @@ if __name__ == '__main__':
             finalrelay = max(lastrelay.values())
         else:
             finalrelay = firstrelay = UNIXorigin
+
+    if args.checkpost: # access to all channels. Tier3 API is called repeatedly (i.e., 20 times).
+        records = defaultdict(set())
+        for channel in channel_list:
+            params={
+                'channel': channel['id'],
+                'oldest': finalpost.timestamp(),
+                'limit': '10000',
+            }
+            post_messages = web_client.api_call('conversations.history', params=params)['messages']
+            for message in sorted(post_messages, key=lambda x: float(x['ts'])):
+                if 'user' in message:
+                    writer = message['user']
+                    if writer in members:
+                        ts = datetime.datetime.fromtimestamp(float(message['ts']))
+                        if 'thread_ts' in message:
+                            thread_ts_t = datetime.datetime.fromtimestamp(float(message['thread_ts']))
+                            if thread_ts_t==ts or ('subtype' in message and message['subtype']=='thread_broadcast'):
+                                appearance = 'broadcast'
+                            else:
+                                appearance = 'thread'
+                        else:
+                            thread_ts_s = ''
+                            appearance = 'broadcast'
+                        if ts > lastpost[writer]:
+                            lastpost[writer] = ts
+                        if ts > lastvisit[writer]:
+                            lastvisit[writer] = ts
+                        records[writer].add((ts, channel['name'], appearance, thread_ts_t,repr(message['text'])))
+        for writer in sorted(records):
+            with open(posthistory_file_path_format.format(writer), 'a') as f:
+                for ts, ch, ap, th_ts, msg in sorted(records[writer]):
+                    print(ts.isoformat(), ch, ap, th_ts.isoformat(), msg, sep='\t', file=f)
 
     if args.checkrelay:
         params={
@@ -305,9 +364,13 @@ if __name__ == '__main__':
             for inactive_id in sorted(inactive):
                 print(user_name[inactive_id], inactive_id, max(lastvisit[inactive_id],lastrelay[inactive_id]).isoformat(), inactive_level[inactive_id], sep='\t', file=f)
 
-    if args.show:
+    if args.showpresence:
         for member_id in members_s:
             print(user_name[member_id], member_id, lastvisit[member_id].isoformat(), sep='\t')
+
+    if args.showpost:
+        for member_id in members_s:
+            print(user_name[member_id], member_id, lastpost[member_id].isoformat(), sep='\t')
 
     if args.showrelay:
         for member_id in members_s:
