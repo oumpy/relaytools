@@ -276,7 +276,14 @@ if __name__ == '__main__':
             try:
                 conversations_history = web_client.api_call('conversations.history', params=params)
             except slack.errors.SlackApiError as e:
-                continue
+                try:
+                    join_response = web_client.api_call('conversations.join', params={'channel':channel['id']})
+                    if not bool(join_response['ok']):
+                        continue
+                    else:
+                        conversations_history = web_client.api_call('conversations.history', params=params)
+                except:
+                    continue
             if not bool(conversations_history['ok']):
                 continue
             print(channel['name'])
