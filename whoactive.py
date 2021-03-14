@@ -306,19 +306,18 @@ if __name__ == '__main__':
                         ts = datetime.datetime.fromtimestamp(float(message['ts']))
                         if 'thread_ts' in message:
                             thread_ts_t = datetime.datetime.fromtimestamp(float(message['thread_ts']))
-                            thread_ts_s = thread_ts_t.isoformat()
                             if thread_ts_t==ts or ('subtype' in message and message['subtype']=='thread_broadcast'):
                                 appearance = 'broadcast'
                             else:
                                 appearance = 'thread'
                         else:
-                            thread_ts_s = ''
+                            thread_ts_t = ts
                             appearance = 'broadcast'
                         if ts > lastpost[writer]:
                             lastpost[writer] = ts
                         if ts > lastvisit[writer]:
                             lastvisit[writer] = ts
-                        records[writer].append((ts, channel['name'], appearance, thread_ts_s, repr(message['text'])))
+                        records[writer].append((ts, channel['name'], appearance, thread_ts_t.isoformat(), repr(message['text'])))
             if post_messages:
                 channel_last[channel['id']] = datetime.datetime.fromtimestamp(float(post_messages[-1]['ts']))
         for writer in sorted(records):
@@ -343,18 +342,17 @@ if __name__ == '__main__':
                 if writer in members:
                     if 'thread_ts' in message:
                         thread_ts_t = datetime.datetime.fromtimestamp(float(message['thread_ts']))
-                        thread_ts_s = thread_ts_t.isoformat()
                         if thread_ts_t==ts or ('subtype' in message and message['subtype']=='thread_broadcast'):
                             appearance = 'broadcast'
                         else:
                             appearance = 'thread'
                     else:
-                        thread_ts_s = ''
+                        thread_ts_t = ts
                         appearance = 'broadcast'
                     if appearance == 'broadcast':
                         lastrelay[writer] = ts
                     with open(relayhistory_file_path_format.format(writer), 'a') as f:
-                        print(ts.isoformat(), relaychannel_name, appearance, thread_ts_s, repr(message['text']), sep='\t', file=f)
+                        print(ts.isoformat(), relaychannel_name, appearance, thread_ts_t.isoformat(), repr(message['text']), sep='\t', file=f)
 
     if args.updatealive:
         inactive = set()
