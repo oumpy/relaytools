@@ -32,8 +32,8 @@ channels_timestamp_file = 'channels_timestamp.tsv'
 presence_file_format = '{}' # member ID.
 relayhistory_file_format = '{}' # member ID.
 posthistory_file_format = '{}' # member ID.
-excluded_members_file = 'presence_excluded_members.txt'
-inactive_members_file = 'inactive_members.txt' # this file is updated automatically.
+excluded_members_file = 'presence_excluded_members.tsv'
+inactive_members_file = 'inactive_members.tsv' # this file is updated automatically.
 
 # ADfirst = datetime.datetime(1,1,1) # AD1.1.1 is Monday
 UNIXorigin = datetime.datetime(1970,1,1)
