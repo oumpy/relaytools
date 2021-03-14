@@ -3,7 +3,7 @@
 from collections import defaultdict
 import os
 import datetime
-from slack import WebClient
+import slack
 import argparse
 import random
 import re
@@ -174,7 +174,7 @@ if __name__ == '__main__':
     else:
         with open(slacktoken_file_path, 'r') as f:
             token = f.readline().rstrip()
-    web_client = WebClient(token=token)
+    web_client = slack.WebClient(token=token)
     channel_list = get_channel_list(web_client)
     if logchannel_name:
         logchannel_id = get_channel_id(None, logchannel_name, channel_list=channel_list)
@@ -266,14 +266,20 @@ if __name__ == '__main__':
             finalrelay = firstrelay = UNIXorigin
 
     if args.checkpost: # access to all channels. Tier3 API is called repeatedly (i.e., 20 times).
-        records = defaultdict(set())
+        records = defaultdict(list)
         for channel in channel_list:
             params={
                 'channel': channel['id'],
                 'oldest': finalpost.timestamp(),
                 'limit': '10000',
             }
-            post_messages = web_client.api_call('conversations.history', params=params)['messages']
+            try:
+                conversations_history = web_client.api_call('conversations.history', params=params)
+            except slack.errors.SlackApiError as e:
+                continue
+            if not bool(conversations_history['ok']):
+                continue
+            post_messages = conversations_history['messages']
             for message in sorted(post_messages, key=lambda x: float(x['ts'])):
                 if 'user' in message:
                     writer = message['user']
@@ -292,7 +298,7 @@ if __name__ == '__main__':
                             lastpost[writer] = ts
                         if ts > lastvisit[writer]:
                             lastvisit[writer] = ts
-                        records[writer].add((ts, channel['name'], appearance, thread_ts_t,repr(message['text'])))
+                        records[writer].append((ts, channel['name'], appearance, thread_ts_t,repr(message['text'])))
         for writer in sorted(records):
             with open(posthistory_file_path_format.format(writer), 'a') as f:
                 for ts, ch, ap, th_ts, msg in sorted(records[writer]):
