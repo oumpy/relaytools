@@ -237,7 +237,10 @@ if __name__ == '__main__':
                 tail = file_tail(posthistory_file_path).strip().split('\t')[0]
                 tail_t = datetime.datetime.fromisoformat(tail)
                 lastpost[member_id] = tail_t
-        finalpost = max(lastpost.values())
+        if lastpost:
+            finalpost = max(lastpost.values())
+        else:
+            finalpost = firstpost = UNIXorigin
 
     if args.checkrelay or args.showrelay or args.updatealive:
         firstrelay = now_t
@@ -266,7 +269,7 @@ if __name__ == '__main__':
             params={
                 'channel': channel['id'],
                 'oldest': finalpost.timestamp(),
-                'limit': '1000',
+                'limit': '10000',
             }
             post_messages = web_client.api_call('conversations.history', params=params)['messages']
             for message in sorted(post_messages, key=lambda x: float(x['ts'])):
@@ -274,15 +277,24 @@ if __name__ == '__main__':
                     writer = message['user']
                     if writer in members:
                         ts = datetime.datetime.fromtimestamp(float(message['ts']))
+                        if 'thread_ts' in message:
+                            thread_ts_t = datetime.datetime.fromtimestamp(float(message['thread_ts']))
+                            if thread_ts_t==ts or ('subtype' in message and message['subtype']=='thread_broadcast'):
+                                appearance = 'broadcast'
+                            else:
+                                appearance = 'thread'
+                        else:
+                            thread_ts_s = ''
+                            appearance = 'broadcast'
                         if ts > lastpost[writer]:
                             lastpost[writer] = ts
-                            records[writer].add((ts, channel['name'], repr(message['text'])))
                         if ts > lastvisit[writer]:
                             lastvisit[writer] = ts
+                        records[writer].add((ts, channel['name'], appearance, thread_ts_t,repr(message['text'])))
         for writer in sorted(records):
             with open(posthistory_file_path_format.format(writer), 'a') as f:
-                for ts, ch, msg in sorted(records[writer]):
-                    print(ts.isoformat(), ch, msg, sep='\t', file=f)
+                for ts, ch, ap, th_ts, msg in sorted(records[writer]):
+                    print(ts.isoformat(), ch, ap, th_ts.isoformat(), msg, sep='\t', file=f)
 
     if args.checkrelay:
         params={
