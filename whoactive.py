@@ -3,7 +3,7 @@
 from collections import defaultdict
 import os
 import datetime
-from slack import WebClient
+import slack
 import argparse
 import random
 import re
@@ -174,7 +174,7 @@ if __name__ == '__main__':
     else:
         with open(slacktoken_file_path, 'r') as f:
             token = f.readline().rstrip()
-    web_client = WebClient(token=token)
+    web_client = slack.WebClient(token=token)
     channel_list = get_channel_list(web_client)
     if logchannel_name:
         logchannel_id = get_channel_id(None, logchannel_name, channel_list=channel_list)
@@ -273,7 +273,13 @@ if __name__ == '__main__':
                 'oldest': finalpost.timestamp(),
                 'limit': '10000',
             }
-            post_messages = web_client.api_call('conversations.history', params=params)['messages']
+            try:
+                conversations_history = web_client.api_call('conversations.history', params=params)
+            except slack.errors.SlackApiError as e:
+                continue
+            if not bool(conversations_history['ok']):
+                continue
+            post_messages = conversations_history['messages']
             for message in sorted(post_messages, key=lambda x: float(x['ts'])):
                 if 'user' in message:
                     writer = message['user']
