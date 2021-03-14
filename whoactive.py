@@ -28,11 +28,12 @@ base_dir = os.environ['HOME'] + appdir
 presence_dir = base_dir + 'members_presence/'
 posthistory_dir = base_dir + 'allpost_history/'
 relayhistory_dir = base_dir + 'relaypost_history/'
+channels_timestamp_file = 'channels_timestamp.tsv'
 presence_file_format = '{}' # member ID.
 relayhistory_file_format = '{}' # member ID.
 posthistory_file_format = '{}' # member ID.
-excluded_members_file = 'presence_excluded_members.txt'
-inactive_members_file = 'inactive_members.txt' # this file is updated automatically.
+excluded_members_file = 'presence_excluded_members.tsv'
+inactive_members_file = 'inactive_members.tsv' # this file is updated automatically.
 
 # ADfirst = datetime.datetime(1,1,1) # AD1.1.1 is Monday
 UNIXorigin = datetime.datetime(1970,1,1)
@@ -85,7 +86,7 @@ def get_channel_list(client, limit=200):
         'limit': str(limit),
         }
     channels = client.api_call('conversations.list', params=params)
-    if channels['ok']:
+    if bool(channels['ok']):
         return channels['channels']
     else:
         return None
@@ -166,6 +167,7 @@ if __name__ == '__main__':
     presence_file_path_format = presence_dir + presence_file_format
     posthistory_file_path_format = posthistory_dir + posthistory_file_format
     relayhistory_file_path_format = relayhistory_dir + relayhistory_file_format
+    channels_timestamp_file_path = base_dir + channels_timestamp_file
     excluded_members_file_path = base_dir + excluded_members_file
     inactive_members_file_path = base_dir + inactive_members_file
 
@@ -232,8 +234,8 @@ if __name__ == '__main__':
             posthistory_file_path = posthistory_file_path_format.format(member_id)
             if os.path.exists(posthistory_file_path):
                 with open(posthistory_file_path) as f:
-                    head = f.readline().strip()
-                    head_t = datetime.datetime.fromisoformat(head).split('\t')[0]
+                    head = f.readline().strip().split('\t')[0]
+                    head_t = datetime.datetime.fromisoformat(head)
                     if head_t < firstpost:
                         firstpost = head_t
                 tail = file_tail(posthistory_file_path).strip().split('\t')[0]
@@ -243,6 +245,15 @@ if __name__ == '__main__':
             finalpost = max(lastpost.values())
         else:
             finalpost = firstpost = UNIXorigin
+        channel_last = defaultdict(lambda: UNIXorigin)
+        with open(channels_timestamp_file_path) as f:
+            for line in f.readlines():
+                chts = line.strip().split('\t')
+                if len(chts) < 2:
+                    continue
+                else:
+                    ch, ts = chts[:2]
+                    channel_last[ch] = datetime.datetime.fromisoformat(ts)
 
     if args.checkrelay or args.showrelay or args.updatealive:
         firstrelay = now_t
@@ -270,17 +281,25 @@ if __name__ == '__main__':
         for channel in channel_list:
             params={
                 'channel': channel['id'],
-                'oldest': finalpost.timestamp(),
+                'oldest': channel_last[channel['id']].timestamp(),
                 'limit': '10000',
             }
             try:
                 conversations_history = web_client.api_call('conversations.history', params=params)
             except slack.errors.SlackApiError as e:
-                continue
+                try:
+                    join_response = web_client.api_call('conversations.join', params={'channel':channel['id']})
+                    if not bool(join_response['ok']):
+                        continue
+                    else:
+                        conversations_history = web_client.api_call('conversations.history', params=params)
+                except:
+                    continue
             if not bool(conversations_history['ok']):
                 continue
-            post_messages = conversations_history['messages']
-            for message in sorted(post_messages, key=lambda x: float(x['ts'])):
+            # print(channel['name'])
+            post_messages = sorted(conversations_history['messages'], key=lambda x: float(x['ts']))
+            for message in post_messages:
                 if 'user' in message:
                     writer = message['user']
                     if writer in members:
@@ -292,17 +311,22 @@ if __name__ == '__main__':
                             else:
                                 appearance = 'thread'
                         else:
-                            thread_ts_s = ''
+                            thread_ts_t = ts
                             appearance = 'broadcast'
                         if ts > lastpost[writer]:
                             lastpost[writer] = ts
                         if ts > lastvisit[writer]:
                             lastvisit[writer] = ts
-                        records[writer].append((ts, channel['name'], appearance, thread_ts_t,repr(message['text'])))
+                        records[writer].append((ts, channel['name'], appearance, thread_ts_t.isoformat(), repr(message['text'])))
+            if post_messages:
+                channel_last[channel['id']] = datetime.datetime.fromtimestamp(float(post_messages[-1]['ts']))
         for writer in sorted(records):
             with open(posthistory_file_path_format.format(writer), 'a') as f:
-                for ts, ch, ap, th_ts, msg in sorted(records[writer]):
-                    print(ts.isoformat(), ch, ap, th_ts.isoformat(), msg, sep='\t', file=f)
+                for ts, ch, ap, th_ts_s, msg in sorted(records[writer]):
+                    print(ts.isoformat(), ch, ap, th_ts_s, msg, sep='\t', file=f)
+        with open(channels_timestamp_file_path, 'w') as f:
+            for ch, tm in sorted(channel_last.items()):
+                print(ch, tm.isoformat(), sep='\t', file=f)
 
     if args.checkrelay:
         params={
@@ -318,18 +342,17 @@ if __name__ == '__main__':
                 if writer in members:
                     if 'thread_ts' in message:
                         thread_ts_t = datetime.datetime.fromtimestamp(float(message['thread_ts']))
-                        thread_ts_s = thread_ts_t.isoformat()
                         if thread_ts_t==ts or ('subtype' in message and message['subtype']=='thread_broadcast'):
                             appearance = 'broadcast'
                         else:
                             appearance = 'thread'
                     else:
-                        thread_ts_s = ''
+                        thread_ts_t = ts
                         appearance = 'broadcast'
                     if appearance == 'broadcast':
                         lastrelay[writer] = ts
                     with open(relayhistory_file_path_format.format(writer), 'a') as f:
-                        print(ts.isoformat(), relaychannel_name, appearance, thread_ts_s, repr(message['text']), sep='\t', file=f)
+                        print(ts.isoformat(), relaychannel_name, appearance, thread_ts_t.isoformat(), repr(message['text']), sep='\t', file=f)
 
     if args.updatealive:
         inactive = set()
