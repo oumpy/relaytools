@@ -218,6 +218,7 @@ if __name__ == '__main__':
                         date, person = line.rstrip().split()[:2]
                         date = int(date)
                         writers_dict[date-date_id] = person
+                last_writer, lastweek_id = get_last_writer(week_id, lookback_weeks, history_filepath_format)
                 break
             else:
                 week_id -= 1
