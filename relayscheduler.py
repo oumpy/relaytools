@@ -41,7 +41,7 @@ excluded_members_file = 'excluded_members.txt'
 weeks_str = ['今週', '来週', '再来週']
 post_format = {
     'post_header_format' : '＊【{}のリレー投稿 担当者のお知らせ】＊',
-    'post_line_format' : '{}月{}日({})：<@{}> さん', # month, day, weekday, writer
+    'post_line_format' : '{1}月{2}日({3})：<@{0}> さん', # writer, month, day, weekday
     'post_nobody' : '\n{}はお休みです。 :sleeping:', # week_str
     'post_footer' : '\nよろしくお願いします！ :sparkles:', # winner
 }
@@ -50,7 +50,7 @@ post_format_reminder = {
 }
 post_format_list = {
     'post_header_format' : '＊【リレー投稿 {}以降の順番予定】＊',
-    'post_line_format' : '<@{}> さん', # month, day, weekday, writer
+    'post_line_format' : '<@{}> さん', # writer
 }
 
 def get_channel_list(client, limit=200):
@@ -251,11 +251,8 @@ if __name__ == '__main__':
     post_lines = [post_header_format.format(week_str)]
     if writers_dict:
         for d, writer in writers_dict.items():
-            if args.list:
-                post_lines.append(post_line_format.format(writer))
-            else:
-                date = startday + datetime.timedelta(d)
-                post_lines.append(post_line_format.format(date.month, date.day, weekdays[d], writer))
+            date = startday + datetime.timedelta(d)
+            post_lines.append(post_line_format.format(writer, date.month, date.day, weekdays[d%7]))
         if len(post_lines) > 1:
             post_lines.append(post_footer)
         else:
