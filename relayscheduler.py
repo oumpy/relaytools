@@ -36,11 +36,13 @@ base_dir = os.environ['HOME'] + appdir
 history_dir = base_dir + 'relayorder_history/'
 #memberlist_file = 'memberlist.txt'
 ts_file = 'ts-relay'
+cyclenumber_file = 'cyclenumber'
 history_file_format = 'week-{}.txt' # week ID.
 excluded_members_file = 'excluded_members.txt'
 weeks_str = ['今週', '来週', '再来週']
 post_format = {
     'post_header_format' : '＊【{}のリレー投稿 担当者のお知らせ】＊',
+    'newcycle_line_format' : '({}巡目開始)', # cyclenumber
     'post_line_format' : '{1}月{2}日({3})：<@{0}> さん', # writer, month, day, weekday
     'post_nobody' : '\n{}はお休みです。 :sleeping:', # week_str
     'post_footer' : '\nよろしくお願いします！ :sparkles:', # winner
@@ -158,6 +160,7 @@ if __name__ == '__main__':
     # memberlist_file_path = base_dir + memberlist_file
     slacktoken_file_path = base_dir + slacktoken_file
     history_file_path_format = history_dir + history_file_format
+    cyclenumber_file_path = history_dir + cyclenumber_file
     excluded_members_files = [excluded_members_file]
     if args.exclude:
         args.exclude = args.exclude.strip()
@@ -194,6 +197,8 @@ if __name__ == '__main__':
             post_format[k] = v
     for k, v in post_format.items():
         globals()[k] = v
+    with open(cyclenumber_file_path) as f:
+        cyclenumber = int(f.readline())
 
     # read the previous record
     last_writer, lastweek_id = get_last_writer(week_id, lookback_weeks, history_file_path_format)
@@ -256,14 +261,34 @@ if __name__ == '__main__':
                     i += 1
             # write the new history
             with open(history_file_path, 'w') as f:
+                cur_hash = hashf(last_writer)
+                new_cyclenumber = cyclenumber
                 for d, writer in sorted(writers_dict.items()):
                     print(date_id + d, writer, file=f)
+                    prev_hash = cur_hash
+                    cur_hash = hashf(writer)
+                    if prev_hash <= start_hash < cur_hash or start_hash < cur_hash < prev_hash:
+                        new_cyclenumber += 1
+                        post_lines.append(newcycle_line_format.format(new_cyclenumber))
+            if new_cyclenumber > cyclenumber:
+                with open(cyclenumber_file_path, 'w') as cf:
+                    print(new_cyclenumber, file=cf)
 
     if args.list: week_id = max(week_id, lastweek_id + 1)
     week_str = weeks_str[week_id - thisweek_id]
     post_lines = [post_header_format.format(week_str)]
+
+    cur_hash = hashf(last_writer)
     if writers_dict:
         for d, writer in sorted(writers_dict.items()):
+            prev_hash = cur_hash
+            cur_hash = hashf(writer)
+            if prev_hash <= start_hash < cur_hash or start_hash < cur_hash < prev_hash:
+                cyclenumber += 1
+                post_lines.append(newcycle_line_format.format(cyclenumber))
+                if not args.list:
+                    with open(cyclenumber_file_path, 'w') as f:
+                        print(cyclenumber, file=f)
             date = startday + datetime.timedelta(d)
             post_lines.append(post_line_format.format(writer, date.month, date.day, weekdays[d%7]))
         if len(post_lines) > 1:
