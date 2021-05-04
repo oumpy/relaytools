@@ -84,6 +84,9 @@ def hashf(key):
 def hash_members(members):
     return sorted([ (hashf(m),m) for m in members ])
 
+start_userid = ''
+start_hash = hashf(start_userid)
+
 def next_writers(members, n, lastwriter):
     N = len(members)
     hashed_members = hash_members(members)
