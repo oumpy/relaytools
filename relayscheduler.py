@@ -99,6 +99,27 @@ def to_be_skipped(year, month, day):
     elif (month, day) in custom_holidays:
         return True
 
+def get_last_writer(week_id, lookback_weeks, history_file_path_format):
+    # read the previous record
+    recent_writers = []
+    lastweek_id = 0
+    for i in range(-lookback_weeks, 1):
+        past_id = week_id + i
+        hf = history_file_path_format.format(past_id)
+        if os.path.exists(hf):
+            lastweek_id = past_id
+            with open(hf, 'r') as f:
+                lines = f.readlines()
+                for line in lines:
+                    date, person = line.rstrip().split()[:2]
+                    recent_writers.append(person)
+    if recent_writers:
+        last_writer = recent_writers[-1]
+    else:
+        last_writer = start_userid
+
+    return last_writer, lastweek_id
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -172,22 +193,7 @@ if __name__ == '__main__':
         globals()[k] = v
 
     # read the previous record
-    recent_writers = []
-    lastweek_id = 0
-    for i in range(-lookback_weeks, 1):
-        past_id = week_id + i
-        hf = history_file_path_format.format(past_id)
-        if os.path.exists(hf):
-            lastweek_id = past_id
-            with open(hf, 'r') as f:
-                lines = f.readlines()
-                for line in lines:
-                    date, person = line.rstrip().split()[:2]
-                    recent_writers.append(person)
-    if recent_writers:
-        last_writer = recent_writers[-1]
-    else:
-        last_writer = ''
+    last_writer, lastweek_id = get_last_writer(week_id, lookback_weeks, history_file_path_format)
 
     if args.slacktoken:
         token = args.slacktoken
