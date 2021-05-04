@@ -136,7 +136,7 @@ if __name__ == '__main__':
         args.exclude = args.exclude.strip()
         if args.exclude[0] in {'(', '['}:
             args.exclude = args.exclude.lstrip('[').lstrip('(').rstrip(']').rstrip(')')
-            excluded_members_files += list(map(strip,args.exclude.split(',')))
+            excluded_members_files += list(map(lambda s: s.strip(), args.exclude.split(',')))
         elif args.exclude:
             excluded_members_files.append(args.exclude)
     excluded_members_file_paths = list(map(lambda x: base_dir + x, excluded_members_files))
