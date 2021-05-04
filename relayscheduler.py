@@ -81,10 +81,12 @@ def get_channel_id(client, channel_name):
 def hashf(key):
     return hashlib.sha256(key.encode()).hexdigest()
 
+def hash_members(members):
+    return sorted([ (hashf(m),m) for m in members ])
+
 def next_writers(members, n, lastwriter):
-    hashed_members = [ (hashf(m),m) for m in members ]
-    hashed_members.sort()
     N = len(members)
+    hashed_members = hash_members(members)
     hashed_lastwriter = (hashf(lastwriter), lastwriter)
     s = bisect_right(hashed_members, hashed_lastwriter)
     return [ hashed_members[(s+i) % N][1] for i in range(n) ]
