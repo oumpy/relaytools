@@ -4,7 +4,7 @@ import requests
 from collections import defaultdict
 import os
 import datetime
-from slack import WebClient
+from slack_sdk import WebClient
 import argparse
 # from random import randrange
 from bisect import bisect_right
