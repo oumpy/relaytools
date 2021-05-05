@@ -141,6 +141,8 @@ if __name__ == '__main__':
                         action='store_true')
     parser.add_argument('--skipholiday', help='skip holidays in Japan.',
                         action='store_true')
+    parser.add_argument('--showcycle', help='show cyclenumber when entered a new cycle.',
+                        action='store_true')
     parser.add_argument('-c', '--channel', default=channel_name,
                         help='slack channel to read & post.')
     parser.add_argument('-o', '--outchannel', default=None,
@@ -285,7 +287,8 @@ if __name__ == '__main__':
             cur_hash = hashf(writer)
             if prev_hash <= start_hash < cur_hash or start_hash < cur_hash < prev_hash:
                 cyclenumber += 1
-                post_lines.append(newcycle_line_format.format(cyclenumber))
+                if args.showcycle:
+                    post_lines.append(newcycle_line_format.format(cyclenumber))
                 if not args.list:
                     with open(cyclenumber_file_path, 'w') as f:
                         print(cyclenumber, file=f)
