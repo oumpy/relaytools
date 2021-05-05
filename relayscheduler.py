@@ -4,7 +4,7 @@ import requests
 from collections import defaultdict
 import os
 import datetime
-from slack import WebClient
+from slack_sdk import WebClient
 import argparse
 # from random import randrange
 from bisect import bisect_right
@@ -41,7 +41,7 @@ excluded_members_file = 'excluded_members.txt'
 weeks_str = ['今週', '来週', '再来週']
 post_format = {
     'post_header_format' : '＊【{}のリレー投稿 担当者のお知らせ】＊',
-    'post_line_format' : '{}月{}日({})：<@{}> さん', # month, day, weekday, writer
+    'post_line_format' : '{1}月{2}日({3})：<@{0}> さん', # writer, month, day, weekday
     'post_nobody' : '\n{}はお休みです。 :sleeping:', # week_str
     'post_footer' : '\nよろしくお願いします！ :sparkles:', # winner
 }
@@ -50,7 +50,7 @@ post_format_reminder = {
 }
 post_format_list = {
     'post_header_format' : '＊【リレー投稿 {}以降の順番予定】＊',
-    'post_line_format' : '<@{}> さん', # month, day, weekday, writer
+    'post_line_format' : '<@{}> さん', # writer
 }
 
 def get_channel_list(client, limit=200):
@@ -78,12 +78,15 @@ def get_channel_id(client, channel_name):
     else:
         return target['id']
 
+def hashf(key):
+    return hashlib.sha256(key.encode()).hexdigest()
+
+def hash_members(members):
+    return sorted([ (hashf(m),m) for m in members ])
+
 def next_writers(members, n, lastwriter):
-    def hashf(key):
-        return hashlib.sha256(key.encode()).hexdigest()
-    hashed_members = [ (hashf(m),m) for m in members ]
-    hashed_members.sort()
     N = len(members)
+    hashed_members = hash_members(members)
     hashed_lastwriter = (hashf(lastwriter), lastwriter)
     s = bisect_right(hashed_members, hashed_lastwriter)
     return [ hashed_members[(s+i) % N][1] for i in range(n) ]
@@ -95,6 +98,27 @@ def to_be_skipped(year, month, day):
         return True
     elif (month, day) in custom_holidays:
         return True
+
+def get_last_writer(week_id, lookback_weeks, history_file_path_format):
+    # read the previous record
+    recent_writers = []
+    lastweek_id = 0
+    for i in range(-lookback_weeks, 1):
+        past_id = week_id + i
+        hf = history_file_path_format.format(past_id)
+        if os.path.exists(hf):
+            lastweek_id = past_id
+            with open(hf, 'r') as f:
+                lines = f.readlines()
+                for line in lines:
+                    date, person = line.rstrip().split()[:2]
+                    recent_writers.append(person)
+    if recent_writers:
+        last_writer = recent_writers[-1]
+    else:
+        last_writer = start_userid
+
+    return last_writer, lastweek_id
 
 
 if __name__ == '__main__':
@@ -136,7 +160,7 @@ if __name__ == '__main__':
         args.exclude = args.exclude.strip()
         if args.exclude[0] in {'(', '['}:
             args.exclude = args.exclude.lstrip('[').lstrip('(').rstrip(']').rstrip(')')
-            excluded_members_files += list(map(strip,args.exclude.split(',')))
+            excluded_members_files += list(map(lambda s: s.strip(), args.exclude.split(',')))
         elif args.exclude:
             excluded_members_files.append(args.exclude)
     excluded_members_file_paths = list(map(lambda x: base_dir + x, excluded_members_files))
@@ -169,22 +193,7 @@ if __name__ == '__main__':
         globals()[k] = v
 
     # read the previous record
-    recent_writers = []
-    lastweek_id = 0
-    for i in range(-lookback_weeks, 1):
-        past_id = week_id + i
-        hf = history_file_path_format.format(past_id)
-        if os.path.exists(hf):
-            lastweek_id = past_id
-            with open(hf, 'r') as f:
-                lines = f.readlines()
-                for line in lines:
-                    date, person = line.rstrip().split()[:2]
-                    recent_writers.append(person)
-    if recent_writers:
-        last_writer = recent_writers[-1]
-    else:
-        last_writer = ''
+    last_writer, lastweek_id = get_last_writer(week_id, lookback_weeks, history_file_path_format)
 
     if args.slacktoken:
         token = args.slacktoken
@@ -243,19 +252,16 @@ if __name__ == '__main__':
                     i += 1
             # write the new history
             with open(history_file_path, 'w') as f:
-                for d, u in writers_dict.items():
-                    print(date_id + d, u, file=f)
+                for d, writer in sorted(writers_dict.items()):
+                    print(date_id + d, writer, file=f)
 
     if args.list: week_id = max(week_id, lastweek_id + 1)
     week_str = weeks_str[week_id - thisweek_id]
     post_lines = [post_header_format.format(week_str)]
     if writers_dict:
-        for d, writer in writers_dict.items():
-            if args.list:
-                post_lines.append(post_line_format.format(writer))
-            else:
-                date = startday + datetime.timedelta(d)
-                post_lines.append(post_line_format.format(date.month, date.day, weekdays[d], writer))
+        for d, writer in sorted(writers_dict.items()):
+            date = startday + datetime.timedelta(d)
+            post_lines.append(post_line_format.format(writer, date.month, date.day, weekdays[d%7]))
         if len(post_lines) > 1:
             post_lines.append(post_footer)
         else:
