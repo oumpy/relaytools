@@ -243,8 +243,8 @@ if __name__ == '__main__':
                     i += 1
             # write the new history
             with open(history_file_path, 'w') as f:
-                for d, u in sorted(writers_dict.items()):
-                    print(date_id + d, u, file=f)
+                for d, writer in sorted(writers_dict.items()):
+                    print(date_id + d, writer, file=f)
 
     if args.list: week_id = max(week_id, lastweek_id + 1)
     week_str = weeks_str[week_id - thisweek_id]
