@@ -219,7 +219,7 @@ if __name__ == '__main__':
         while week_id >= thisweek_id:
             hf = history_file_path_format.format(week_id)
             if os.path.exists(hf):
-                last_writer, _ = get_last_writer(week_id, lookback_weeks, history_filepath_format)
+                last_writer, _ = get_last_writer(week_id, lookback_weeks, history_file_path_format)
                 with open(hf, 'r') as f:
                     cur_hash = hashf(last_writer)
                     delta_cycle = 0
