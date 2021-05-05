@@ -243,14 +243,14 @@ if __name__ == '__main__':
                     i += 1
             # write the new history
             with open(history_file_path, 'w') as f:
-                for d, u in writers_dict.items():
+                for d, u in sorted(writers_dict.items()):
                     print(date_id + d, u, file=f)
 
     if args.list: week_id = max(week_id, lastweek_id + 1)
     week_str = weeks_str[week_id - thisweek_id]
     post_lines = [post_header_format.format(week_str)]
     if writers_dict:
-        for d, writer in writers_dict.items():
+        for d, writer in sorted(writers_dict.items()):
             date = startday + datetime.timedelta(d)
             post_lines.append(post_line_format.format(writer, date.month, date.day, weekdays[d%7]))
         if len(post_lines) > 1:
