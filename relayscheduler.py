@@ -219,13 +219,20 @@ if __name__ == '__main__':
         while week_id >= thisweek_id:
             hf = history_file_path_format.format(week_id)
             if os.path.exists(hf):
+                last_writer, _ = get_last_writer(week_id, lookback_weeks, history_filepath_format)
                 with open(hf, 'r') as f:
+                    cur_hash = hashf(last_writer)
+                    delta_cycle = 0
                     lines = f.readlines()
                     for line in lines:
                         date, person = line.rstrip().split()[:2]
+                        prev_hash = cur_hash
+                        cur_hash = hashf(person)
+                        if prev_hash <= start_hash < cur_hash or start_hash < cur_hash < prev_hash:
+                            delta_cycle += 1
                         date = int(date)
                         writers_dict[date-date_id] = person
-                last_writer, lastweek_id = get_last_writer(week_id, lookback_weeks, history_filepath_format)
+                cyclenumber -= delta_cycle
                 break
             else:
                 week_id -= 1
