@@ -272,20 +272,6 @@ if __name__ == '__main__':
                 if not to_be_skipped(date.year, date.month, date.day):
                     writers_dict[d] = writers[i]
                     i += 1
-            # write the new history
-            with open(history_file_path, 'w') as f:
-                cur_hash = hashf(last_writer)
-                new_cyclenumber = cyclenumber
-                for d, writer in sorted(writers_dict.items()):
-                    print(date_id + d, writer, file=f)
-                    prev_hash = cur_hash
-                    cur_hash = hashf(writer)
-                    if prev_hash <= start_hash < cur_hash or start_hash < cur_hash < prev_hash:
-                        new_cyclenumber += 1
-                        post_lines.append(newcycle_line_format.format(new_cyclenumber))
-            if new_cyclenumber > cyclenumber:
-                with open(cyclenumber_file_path, 'w') as cf:
-                    print(new_cyclenumber, file=cf)
 
     if args.list: week_id = max(week_id, lastweek_id + 1)
     week_str = weeks_str[week_id - thisweek_id]
@@ -294,6 +280,10 @@ if __name__ == '__main__':
     cur_hash = hashf(last_writer)
     if writers_dict:
         for d, writer in sorted(writers_dict.items()):
+            # write to history file
+            if not (args.list or args.reminder):
+                with open(history_file_path, 'a') as f:
+                    print(date_id + d, writer, file=f)
             prev_hash = cur_hash
             cur_hash = hashf(writer)
             if prev_hash <= start_hash < cur_hash or start_hash < cur_hash < prev_hash:
