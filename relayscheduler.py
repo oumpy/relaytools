@@ -153,11 +153,14 @@ if __name__ == '__main__':
                         help='specify arbitrary date "yyyy-mm-dd" for test.')
     parser.add_argument('--exclude', default=None,
                         help='specify an additional file or list/tuple of files, containing IDs to be excluded.')
+    parser.add_argument('--mingrace', type=int, default=min_grace,
+                        help='set minimum interval to the starting Monday.')
     args = parser.parse_args()
 
     if args.noslack:
         post_to_slack = False
     channel_name = args.channel
+    min_grace = args.mingrace
 
     # memberlist_file_path = base_dir + memberlist_file
     slacktoken_file_path = base_dir + slacktoken_file
