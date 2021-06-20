@@ -296,7 +296,7 @@ if __name__ == '__main__':
                 cyclenumber += 1
                 if args.showcycle:
                     post_lines.append(newcycle_line_format.format(cyclenumber))
-                if not args.list:
+                if not (args.list or args.reminder):
                     with open(cyclenumber_file_path, 'w') as f:
                         print(cyclenumber, file=f)
             date = startday + datetime.timedelta(d)
