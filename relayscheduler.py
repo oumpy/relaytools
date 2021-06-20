@@ -240,6 +240,7 @@ if __name__ == '__main__':
             else:
                 week_id -= 1
                 date_id -= 7
+                startday -= datetime.timedelta(7)
         else:
             exit()
     else:
