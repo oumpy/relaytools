@@ -36,7 +36,7 @@ appdir = 'var/relaytools/'
 ts_file = 'ts-relay'
 cyclenumber_file = 'cyclenumber'
 history_file_format = 'week-{}.tsv' # week ID.
-excluded_members_file = 'excluded_members.txt'
+excluded_members_file = 'excluded_members.tsv'
 weeks_str = ['今週', '来週', '再来週']
 post_format = {
     'post_header_format' : '＊【{}のリレー投稿 担当者のお知らせ】＊',
