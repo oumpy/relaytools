@@ -31,9 +31,7 @@ custom_holidays = [(1,d) for d in range(1,4)] + [(12,d) for d in range(21,32)]
 excluded_members = set()
 
 channel_name = 'リレー投稿'
-appdir = '/var/relaytools/'
-base_dir = os.environ['HOME'] + appdir
-history_dir = base_dir + 'relayorder_history/'
+appdir = 'var/relaytools/'
 #memberlist_file = 'memberlist.txt'
 ts_file = 'ts-relay'
 cyclenumber_file = 'cyclenumber'
@@ -155,6 +153,8 @@ if __name__ == '__main__':
                         help='specify an additional file or list/tuple of files, containing IDs to be excluded.')
     parser.add_argument('--mingrace', type=int, default=min_grace,
                         help='set minimum interval to the starting Monday.')
+    parser.add_argument('--appdir', default=appdir,
+                        help='Set application directory, as a relative path from $HOME. (default: {})'.format(appdir))
     args = parser.parse_args()
 
     if args.noslack:
@@ -162,10 +162,13 @@ if __name__ == '__main__':
     channel_name = args.channel
     min_grace = args.mingrace
 
+    base_dir = os.path.join(os.environ['HOME'], appdir)
+    history_dir = os.path.join(base_dir, 'relayorder_history/')
+
     # memberlist_file_path = base_dir + memberlist_file
-    slacktoken_file_path = base_dir + slacktoken_file
-    history_file_path_format = history_dir + history_file_format
-    cyclenumber_file_path = history_dir + cyclenumber_file
+    slacktoken_file_path = os.path.join(base_dir, slacktoken_file)
+    history_file_path_format = os.path.join(history_dir, history_file_format)
+    cyclenumber_file_path = os.path.join(history_dir, cyclenumber_file)
     excluded_members_files = [excluded_members_file]
     if args.exclude:
         args.exclude = args.exclude.strip()
@@ -174,7 +177,7 @@ if __name__ == '__main__':
             excluded_members_files += list(map(lambda s: s.strip(), args.exclude.split(',')))
         elif args.exclude:
             excluded_members_files.append(args.exclude)
-    excluded_members_file_paths = list(map(lambda x: base_dir + x, excluded_members_files))
+    excluded_members_file_paths = list(map(lambda x: os.path.join(base_dir, x), excluded_members_files))
 
     if args.date:
         today = datetime.date.fromisoformat(args.date)
