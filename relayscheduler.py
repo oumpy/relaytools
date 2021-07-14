@@ -31,9 +31,9 @@ custom_holidays = [(1,d) for d in range(1,4)] + [(12,d) for d in range(21,32)]
 excluded_members = set()
 
 channel_name = 'リレー投稿'
-appdir = '/var/relaytools/'
-base_dir = os.environ['HOME'] + appdir
-history_dir = base_dir + 'relayorder_history/'
+appdir = 'var/relaytools/'
+base_dir = os.path.join(os.environ['HOME'], appdir)
+history_dir = os.path.join(base_dir, 'relayorder_history/')
 #memberlist_file = 'memberlist.txt'
 ts_file = 'ts-relay'
 cyclenumber_file = 'cyclenumber'
@@ -163,9 +163,9 @@ if __name__ == '__main__':
     min_grace = args.mingrace
 
     # memberlist_file_path = base_dir + memberlist_file
-    slacktoken_file_path = base_dir + slacktoken_file
-    history_file_path_format = history_dir + history_file_format
-    cyclenumber_file_path = history_dir + cyclenumber_file
+    slacktoken_file_path = os.path.join(base_dir, slacktoken_file)
+    history_file_path_format = os.path.join(history_dir, history_file_format)
+    cyclenumber_file_path = os.path.join(history_dir, cyclenumber_file)
     excluded_members_files = [excluded_members_file]
     if args.exclude:
         args.exclude = args.exclude.strip()
@@ -174,7 +174,7 @@ if __name__ == '__main__':
             excluded_members_files += list(map(lambda s: s.strip(), args.exclude.split(',')))
         elif args.exclude:
             excluded_members_files.append(args.exclude)
-    excluded_members_file_paths = list(map(lambda x: base_dir + x, excluded_members_files))
+    excluded_members_file_paths = list(map(lambda x: os.path.join(base_dir, x), excluded_members_files))
 
     if args.date:
         today = datetime.date.fromisoformat(args.date)
