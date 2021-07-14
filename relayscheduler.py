@@ -32,8 +32,6 @@ excluded_members = set()
 
 channel_name = 'リレー投稿'
 appdir = 'var/relaytools/'
-base_dir = os.path.join(os.environ['HOME'], appdir)
-history_dir = os.path.join(base_dir, 'relayorder_history/')
 #memberlist_file = 'memberlist.txt'
 ts_file = 'ts-relay'
 cyclenumber_file = 'cyclenumber'
@@ -155,12 +153,17 @@ if __name__ == '__main__':
                         help='specify an additional file or list/tuple of files, containing IDs to be excluded.')
     parser.add_argument('--mingrace', type=int, default=min_grace,
                         help='set minimum interval to the starting Monday.')
+    parser.add_argument('--appdir', default=appdir,
+                        help='Set application directory, as a relative path from $HOME. (default: {})'.format(appdir))
     args = parser.parse_args()
 
     if args.noslack:
         post_to_slack = False
     channel_name = args.channel
     min_grace = args.mingrace
+
+    base_dir = os.path.join(os.environ['HOME'], appdir)
+    history_dir = os.path.join(base_dir, 'relayorder_history/')
 
     # memberlist_file_path = base_dir + memberlist_file
     slacktoken_file_path = os.path.join(base_dir, slacktoken_file)
