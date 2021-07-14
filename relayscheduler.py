@@ -35,7 +35,7 @@ appdir = 'var/relaytools/'
 #memberlist_file = 'memberlist.txt'
 ts_file = 'ts-relay'
 cyclenumber_file = 'cyclenumber'
-history_file_format = 'week-{}.txt' # week ID.
+history_file_format = 'week-{}.tsv' # week ID.
 excluded_members_file = 'excluded_members.txt'
 weeks_str = ['今週', '来週', '再来週']
 post_format = {
@@ -286,7 +286,7 @@ if __name__ == '__main__':
             # write to history file
             if not (args.list or args.reminder):
                 with open(history_file_path, 'a') as f:
-                    print(date_id + d, writer, file=f)
+                    print(date_id + d, writer, sep='\t', file=f)
             prev_hash = cur_hash
             cur_hash = hashf(writer)
             if prev_hash <= start_hash < cur_hash or start_hash < cur_hash < prev_hash:
