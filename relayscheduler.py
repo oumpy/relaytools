@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-import requests
-from collections import defaultdict
 import os
 import datetime
 from slack_sdk import WebClient
