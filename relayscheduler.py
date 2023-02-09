@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 import os
+import sys
 import datetime
 from slack_sdk import WebClient
 from mattermostdriver import Driver
@@ -86,31 +87,38 @@ class MattermostManager(Manager):
         # self.mmDriver.users.get_user( user_id='me' )
 
     def getChannelId(self, channel_name, team_name) :
-        print(channel_name, team_name)
+        # print(channel_name, team_name)
         team_id = self.getTeamId(team_name)
-        return self.mmDriver.channels.get_channel_by_name(team_id, channel_name)['id']
+        self.mmDriver.login()
+        channel_id = self.mmDriver.channels.get_channel_by_name(team_id, channel_name)['id']
+        self.mmDriver.logout()
+        return channel_id
         # return self.mmDriver.channels.get_channel_by_name_and_team_name(team_name, channel_name)['id']
 
     def getTeamId(self, team_name):
-        print(vars(self.mmDriver.teams))
+        # print(vars(self.mmDriver.teams))
         # print(vars(vars(self.mmDriver.teams)['client']))
-        if self.mmDriver.teams.check_team_exists(team_name):
-            print('Yes')
-        else:
-            print('No')
-        team0 = self.mmDriver.teams.get_team_by_name(team_name)
-        team_id = team0['id']
+        self.mmDriver.login()
+        if not self.mmDriver.teams.check_team_exists(team_name):
+            return None
+        team_id = self.mmDriver.teams.get_team_by_name(team_name)['id']
+        self.mmDriver.logout()
         return team_id
 
     def getMyId(self) :
-        return self.mmDriver.users.get_user(user_id='me')
+        self.mmDriver.login()
+        my_id = self.mmDriver.users.get_user(user_id='me')['id']
+        self.mmDriver.logout()
+        return my_id
 
     def getTeamMembers(self, team_name) :
         # for restricted teams, we need to get the ID first, and
         # for this, we need to have the "name" (as in the URL), not
         # the "display name", as shown in the GUIs:
         team_id = self.getTeamId(team_name)
+        self.mmDriver.login()
         team = self.mmDriver.teams.check_team_exists(team_name)
+        self.mmDriver.logout()
         if not team['exists'] :
             return None
         users = self._getAllUsersForTeam(team_id)
@@ -130,11 +138,14 @@ class MattermostManager(Manager):
         users = []
         pgNo = 0
         def get_users(team_id, pgNo, per_page=per_page):
-            return self.mmDriver.users.get_users(params={
+            self.mmDriver.login()
+            users = self.mmDriver.users.get_users(params={
                     'in_team'   :   team_id,
                     'page'      :   str(pgNo),
                     'per_page'  :   per_page,
             })
+            self.mmDriver.logout()
+            return users
         channelUsers = get_users(team_id, pgNo)
         while channelUsers:
             users += channelUsers
@@ -148,11 +159,14 @@ class MattermostManager(Manager):
         users = []
         pgNo = 0
         def get_users(channel_id, pgNo, per_page=per_page):
-            return self.mmDriver.users.get_users(params={
+            self.mmDriver.login()
+            users = self.mmDriver.users.get_users(params={
                     'in_channel':   channel_id,
                     'page'      :   str(pgNo),
                     'per_page'  :   per_page,
             })
+            self.mmDriver.logout()
+            return users
         channelUsers = get_users(channel_id, pgNo)
         while channelUsers:
             users += channelUsers
@@ -313,7 +327,7 @@ if __name__ == '__main__':
                         help='channel to post.')
     parser.add_argument('-t', '--team', default=None,
                         help='team to search channel.')
-    parser.add_argument('-c', '--channel', default=channel_name,
+    parser.add_argument('-c', '--channel', default=None,
                         help='channel to read & post.')
     parser.add_argument('--token', default=None,
                         help='bot token.')
@@ -335,7 +349,6 @@ if __name__ == '__main__':
 
     if args.local:
         post_to_remote = False
-    channel_name = args.channel
     min_grace = args.mingrace
 
     # memberlist_file_path = base_dir + memberlist_file
@@ -400,12 +413,21 @@ if __name__ == '__main__':
             team_name = args.team
         elif 'team' in config:
             team_name = config['team']
+        if args.channel:
+            channel_name = args.channel
+        elif 'channel' in config:
+            channel_name = config['channel']
         config.pop('team', None)
+        config.pop('channel', None)
         config.pop('token', None)
+        # print(config)
         manager = MattermostManager(token, **config)
     else:
         team_name = url = None
+        if args.channel:
+            channel_name = args.channel
         manager = SlackManager(token)
+
     channel_id = manager.getChannelId(channel_name, team_name)
     my_id = manager.getMyId()
 
@@ -499,5 +521,5 @@ if __name__ == '__main__':
             solopost=False,
         )
     else:
-        print('App ID:', my_id)
+        print('App ID:', my_id, file=sys.stderr)
         print(message)
