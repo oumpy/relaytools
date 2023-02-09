@@ -84,20 +84,15 @@ class MattermostManager(Manager):
             'token' :   token,
         } | kwargs
         self.mmDriver = Driver(options=options)
-        # self.mmDriver.users.get_user( user_id='me' )
 
     def getChannelId(self, channel_name, team_name) :
-        # print(channel_name, team_name)
         team_id = self.getTeamId(team_name)
         self.mmDriver.login()
         channel_id = self.mmDriver.channels.get_channel_by_name(team_id, channel_name)['id']
         self.mmDriver.logout()
         return channel_id
-        # return self.mmDriver.channels.get_channel_by_name_and_team_name(team_name, channel_name)['id']
 
     def getTeamId(self, team_name):
-        # print(vars(self.mmDriver.teams))
-        # print(vars(vars(self.mmDriver.teams)['client']))
         self.mmDriver.login()
         if not self.mmDriver.teams.check_team_exists(team_name):
             return None
@@ -420,7 +415,6 @@ if __name__ == '__main__':
         config.pop('team', None)
         config.pop('channel', None)
         config.pop('token', None)
-        # print(config)
         manager = MattermostManager(token, **config)
     else:
         team_name = url = None
