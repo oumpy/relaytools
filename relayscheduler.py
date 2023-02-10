@@ -41,18 +41,18 @@ history_file_format = 'week-{}.tsv' # week ID.
 excluded_members_file = 'excluded_members.tsv'
 weeks_str = ['今週', '来週', '再来週']
 post_format = {
-    'post_header_format' : '＊【{}のリレー投稿 担当者のお知らせ】＊',
+    'post_header_format' : '{1}【{0}のリレー投稿 担当者のお知らせ】{1}', # 1: bold_sign
     'newcycle_line_format' : '({}巡目開始)', # cyclenumber
-    'post_line_format' : '{1}月{2}日({3})：<@{0}> さん', # writer, month, day, weekday
+    'post_line_format' : '{1}月{2}日({3})：{4}@{0}{5} さん', # writer, month, day, weekday, mention-signs
     'post_nobody' : '\n{}はお休みです。 :sleeping:', # week_str
     'post_footer' : '\nよろしくお願いします！ :sparkles:', # winner
 }
 post_format_reminder = {
-    'post_header_format' : '*【{}のリレー投稿 リマインダ】*',
+    'post_header_format' : '{1}【{0}のリレー投稿 リマインダ】{1}',
 }
 post_format_list = {
-    'post_header_format' : '＊【リレー投稿 {}以降の順番予定】＊',
-    'post_line_format' : '<@{}> さん', # writer
+    'post_header_format' : '{1}【リレー投稿 {0}以降の順番予定】{1}',
+    'post_line_format' : '{4}@{0}{5} さん', # writer
 }
 
 base_dir = os.path.join(os.environ['HOME'], appdir)
@@ -67,14 +67,16 @@ class Manager(object) :
         return None
     def getMyId(self) :
         return None
-    def getTeamMembers(self, team_name, channel_name=None) :
+    def getTeamMembersData(self, team_id) :
         return list()
-    def getChannelMembers(self, team_name, channel_name) :
+    def getChannelMembersData(self, channel_id) :
         return list()
-    def getAllUsersForTeam(self, team_id) :
+    def getTeamMembers(self, team_id) :
         return list()
-    def getAllUsersForChannel(self, channel_id) :
+    def getChannelMembers(self, channel_id) :
         return list()
+    def getIdNameDict(self, channel_id):
+        return dict()
     def post(self, channel_id, message, **kwargs):
         return None
 
@@ -106,68 +108,55 @@ class MattermostManager(Manager):
         self.mmDriver.logout()
         return my_id
 
-    def getTeamMembers(self, team_name) :
-        # for restricted teams, we need to get the ID first, and
-        # for this, we need to have the "name" (as in the URL), not
-        # the "display name", as shown in the GUIs:
-        team_id = self.getTeamId(team_name)
-        self.mmDriver.login()
-        team = self.mmDriver.teams.check_team_exists(team_name)
-        self.mmDriver.logout()
-        if not team['exists'] :
-            return None
-        users = self.getAllUsersForTeam(team_id)
-        return users
-
-    def getChannelMembers(self, channel_name, team_name) :
-        # for restricted teams, we need to get the ID first, and
-        # for this, we need to have the "name" (as in the URL), not
-        # the "display name", as shown in the GUIs:
-        channel_id = self.getChannelId(channel_name, team_name)
-        users = self.getAllUsersForChannel(channel_id)
-        return users
-
-    def getAllUsersForTeam(self, team_id, per_page=200) :
+    def getTeamMembersData(self, team_id, per_page=200) :
         # get all users for a team
         # with the max of 200 per page, we need to iterate a bit over the pages
-        users = []
+        users_data = []
         pgNo = 0
         def get_users(team_id, pgNo, per_page=per_page):
             self.mmDriver.login()
-            users = self.mmDriver.users.get_users(params={
+            users_data = self.mmDriver.users.get_users(params={
                     'in_team'   :   team_id,
                     'page'      :   str(pgNo),
                     'per_page'  :   per_page,
             })
             self.mmDriver.logout()
-            return users
-        channelUsers = get_users(team_id, pgNo)
-        while channelUsers:
-            users += channelUsers
+            return users_data
+        teamUsers = get_users(team_id, pgNo)
+        while teamUsers:
+            users_data += teamUsers
             pgNo += 1
-            channelUsers = get_users(team_id, pgNo)
-        return [user['id'] for user in users]
+            teamUsers = get_users(team_id, pgNo)
+        return users_data
 
-    def getAllUsersForChannel(self, channel_id, per_page=200) :
+    def getChannelMembersData(self, channel_id, per_page=200) :
         # get all users for a channel
         # with the max of 200 per page, we need to iterate a bit over the pages
-        users = []
+        users_data = []
         pgNo = 0
         def get_users(channel_id, pgNo, per_page=per_page):
             self.mmDriver.login()
-            users = self.mmDriver.users.get_users(params={
+            users_data = self.mmDriver.users.get_users(params={
                     'in_channel':   channel_id,
                     'page'      :   str(pgNo),
                     'per_page'  :   per_page,
             })
             self.mmDriver.logout()
-            return users
+            return users_data
         channelUsers = get_users(channel_id, pgNo)
         while channelUsers:
-            users += channelUsers
+            users_data += channelUsers
             pgNo += 1
             channelUsers = get_users(channel_id, pgNo)
-        return [user['id'] for user in users]
+        return users_data
+
+    def getChannelMembers(self, channel_id, per_page=200) :
+        users_data = self.getChannelMembersData(channel_id, per_page)
+        return [user['id'] for user in users_data]
+
+    def getIdNameDict(self, channel_id):
+        users_data = self.getChannelMembersData(channel_id)
+        return {user['id'] : user['username'] for user in users_data}
 
     def post(self, channel_id, message, **kwargs):
         self.mmDriver.login()
@@ -208,16 +197,20 @@ class SlackManager(Manager):
         else:
             return None
 
-    def getChannelMembers(self, channel_name, team_name=None):
-        channel_id = self.getChannelId(channel_name)
-        return self.client.api_call('conversations.members', params={'channel':channel_id})['members']
+    def getChannelMembersData(self, channel_id):
+        return self.client.api_call('conversations.members', params={'channel':channel_id})
 
     def getMyId(self) :
         return self.client.api_call('auth.test')['user_id']
 
-    def getAllUsersForChannel(self, channel_id, exclude_bot=True) :
-        channel_members = self.client.api_call('conversations.members', params={'channel':channel_id})['members']
-        return [ member['id'] for member in channel_members if not (bool(member['is_bot']) and exclude_bot) ]
+    def getChannelMembers(self, channel_id, exclude_bot=True) :
+        channel_members = self.getChannelMembersData(channel_id)['members']
+        return [ member for member in channel_members # if not (bool(member['is_bot']) and exclude_bot) 
+            ]
+
+    def getIdNameDict(self, channel_id):
+        members_data = self.getChannelMembers(channel_id)
+        return {member : member for member in members_data}
 
     def post(self, channel_id, message, **kwargs):
         params={
@@ -246,10 +239,7 @@ class SlackManager(Manager):
                 print(ts, file=f)
         return response
 
-def hashf(key):
-    return hashlib.sha256(key.encode()).hexdigest()
-
-def hash_members(members, dictionary_file=None):
+def hash_dictionary(dictionary_file=None):
     transpose = dict()
     if dictionary_file:
         with open(dictionary_file) as f:
@@ -257,15 +247,22 @@ def hash_members(members, dictionary_file=None):
                 if line.strip()[0] != '#':
                     a, b = line.split()[:2]
                     transpose[a] = b
-    return sorted([ (hashf(transpose[m] if m in transpose else m),m) for m in members ])
+    return transpose
+
+def hashf(key, transpose_dict=dict()):
+    if key in transpose_dict:
+        key = transpose_dict[key]
+    return hashlib.sha256(key.encode()).hexdigest()
+
+def hash_members(members, transpose_dict=dict()):
+    return sorted([ (hashf(m, transpose_dict),m) for m in members ])
 
 start_userid = ''
-start_hash = hashf(start_userid)
 
-def next_writers(members, n, lastwriter, dictionary_file=None):
+def next_writers(members, n, lastwriter, dictionary=dict()):
     N = len(members)
-    hashed_members = hash_members(members, dictionary_file)
-    hashed_lastwriter = (hashf(lastwriter), lastwriter)
+    hashed_members = hash_members(members, dictionary)
+    hashed_lastwriter = (hashf(lastwriter, dictionary), lastwriter)
     s = bisect_right(hashed_members, hashed_lastwriter)
     return [ hashed_members[(s+i) % N][1] for i in range(n) ]
 
@@ -416,15 +413,19 @@ if __name__ == '__main__':
         config.pop('channel', None)
         config.pop('token', None)
         manager = MattermostManager(token, **config)
-    else:
+        bold_sign, mention_bra, mention_ket = '**', '', ''
+    else: # Slack
         team_name = url = None
         if args.channel:
             channel_name = args.channel
         manager = SlackManager(token)
+        bold_sign, mention_bra, mention_ket = '*', '<', '>'
 
     channel_id = manager.getChannelId(channel_name, team_name)
     my_id = manager.getMyId()
-
+    id_name_dict = manager.getIdNameDict(channel_id)
+    transpose_dict = hash_dictionary(args.id_dictionary)
+    start_hash = hashf(start_userid, transpose_dict)
     writers_dict = dict()
     if args.reminder:
         while week_id >= thisweek_id:
@@ -432,13 +433,13 @@ if __name__ == '__main__':
             if os.path.exists(hf):
                 last_writer, _ = get_last_writer(week_id, lookback_weeks, history_file_path_format)
                 with open(hf, 'r') as f:
-                    cur_hash = hashf(last_writer)
+                    cur_hash = hashf(last_writer, transpose_dict)
                     delta_cycle = 0
                     lines = f.readlines()
                     for line in lines:
                         date, person = line.rstrip().split()[:2]
                         prev_hash = cur_hash
-                        cur_hash = hashf(person)
+                        cur_hash = hashf(person, transpose_dict)
                         if prev_hash <= start_hash < cur_hash or start_hash < cur_hash < prev_hash:
                             delta_cycle += 1
                         date = int(date)
@@ -458,14 +459,14 @@ if __name__ == '__main__':
                     lines = f.readlines()
                     for line in lines:
                         excluded_members.add(line.rstrip().split('\t')[1])
-        channel_members = manager.getAllUsersForChannel(channel_id)
+        channel_members = manager.getChannelMembers(channel_id)
         members = set(channel_members) - excluded_members
         # members.discard(my_id)
         if args.list:
-            for d, writer in enumerate(next_writers(members, len(members), last_writer, args.id_dictionary)):
+            for d, writer in enumerate(next_writers(members, len(members), last_writer, transpose_dict)):
                 writers_dict[d] = writer
         else:
-            writers = next_writers(members, len(relaydays), last_writer, args.id_dictionary)
+            writers = next_writers(members, len(relaydays), last_writer, transpose_dict)
             i = 0
             for d in relaydays:
                 date = startday + datetime.timedelta(d)
@@ -475,9 +476,9 @@ if __name__ == '__main__':
 
     if args.list: week_id = max(week_id, lastweek_id + 1)
     week_str = weeks_str[week_id - thisweek_id]
-    post_lines = [post_header_format.format(week_str)]
+    post_lines = [post_header_format.format(week_str, bold_sign)]
 
-    cur_hash = hashf(last_writer)
+    cur_hash = hashf(last_writer, transpose_dict)
     if writers_dict:
         for d, writer in sorted(writers_dict.items()):
             # write to history file
@@ -485,7 +486,7 @@ if __name__ == '__main__':
                 with open(history_file_path, 'a') as f:
                     print(date_id + d, writer, sep='\t', file=f)
             prev_hash = cur_hash
-            cur_hash = hashf(writer)
+            cur_hash = hashf(writer, transpose_dict)
             if prev_hash <= start_hash < cur_hash or start_hash < cur_hash < prev_hash:
                 cyclenumber += 1
                 if args.showcycle:
@@ -494,7 +495,7 @@ if __name__ == '__main__':
                     with open(cyclenumber_file_path, 'w') as f:
                         print(cyclenumber, file=f)
             date = startday + datetime.timedelta(d)
-            post_lines.append(post_line_format.format(writer, date.month, date.day, weekdays[d%7]))
+            post_lines.append(post_line_format.format(id_name_dict[writer], date.month, date.day, weekdays[d%7],mention_bra,mention_ket))
         if len(post_lines) > 1:
             post_lines.append(post_footer)
         else:
