@@ -116,7 +116,7 @@ class MattermostManager(Manager):
         self.mmDriver.logout()
         if not team['exists'] :
             return None
-        users = self._getAllUsersForTeam(team_id)
+        users = self.getAllUsersForTeam(team_id)
         return users
 
     def getChannelMembers(self, channel_name, team_name) :
@@ -146,7 +146,7 @@ class MattermostManager(Manager):
             users += channelUsers
             pgNo += 1
             channelUsers = get_users(team_id, pgNo)
-        return users
+        return [user['id'] for user in users]
 
     def getAllUsersForChannel(self, channel_id, per_page=200) :
         # get all users for a channel
@@ -167,7 +167,7 @@ class MattermostManager(Manager):
             users += channelUsers
             pgNo += 1
             channelUsers = get_users(channel_id, pgNo)
-        return users
+        return [user['id'] for user in users]
 
     def post(self, channel_id, message, **kwargs):
         self.mmDriver.login()
@@ -175,7 +175,7 @@ class MattermostManager(Manager):
             'channel_id':   channel_id,
             'message'   :   message,
             }
-        response = self.mmDriver.create_post(options=param)
+        response = self.mmDriver.posts.create_post(options=param)
         self.mmDriver.logout()
         return response
 
