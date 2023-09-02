@@ -40,7 +40,7 @@ class MattermostChannel:
         for post in all_posts.values():
             user_id = post['user_id']
             if user_id in user_ids:
-                create_at = datetime.fromtimestamp(post['create_at'] // 1000)
+                create_at = datetime.fromtimestamp(post['create_at'] / 1000)
                 if user_id not in last_post_dates or create_at > last_post_dates[user_id]:
                     last_post_dates[user_id] = create_at
         return last_post_dates
