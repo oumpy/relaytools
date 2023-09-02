@@ -35,7 +35,7 @@ class MattermostChannel:
         return posts
 
     def fetch_last_post_dates(self, user_ids: List[str], after: datetime = datetime.fromtimestamp(0)) -> Dict[str, datetime]:
-        last_post_dates = {}
+        last_post_dates = dict.fromkeys(user_ids, after)
         all_posts = self.fetch_posts(after)['posts']
         for post in all_posts.values():
             user_id = post['user_id']
