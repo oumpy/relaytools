@@ -1,0 +1,80 @@
+#!/usr/bin/env python3
+#
+# RelayReminder
+#
+# @2023 AtamaokaC
+# Python Party of Osaka University Medical School, Japan
+#
+# Lisence: GNU General Publice Lisence v3
+#
+
+from mattermostdriver import Driver
+from datetime import datetime, timedelta
+import argparse
+from typing import List, Dict, Optional
+
+class MattermostChannel:
+    def __init__(self, driver_params: Dict, team_name: str, channel_name: str):
+        self.mm_driver = Driver(driver_params)
+        self.mm_driver.login()
+        self.team_name = team_name
+        self.channel_name = channel_name
+        self.channel_id = self.get_channel_id()
+        self.members = self.fetch_members()
+
+    def get_channel_id(self) -> str:
+        channels = self.mm_driver.channels.get_channels_for_team_by_name(self.team_name, self.channel_name)
+        for channel in channels:
+            if channel['display_name'] == self.channel_name:
+                return channel['id']
+        return ""
+
+    def fetch_members(self) -> List[str]:
+        members = self.mm_driver.channels.get_channel_members(self.channel_id)
+        return [member['user_id'] for member in members]
+
+    def fetch_posts(self, after: datetime = datetime.fromtimestamp(0)) -> Dict:
+        posts = self.mm_driver.posts.get_posts_for_channel(self.channel_id, params={'since': int(after.timestamp() * 1000)})
+        return posts
+
+    def fetch_last_post_dates(self, user_ids: List[str], after: datetime = datetime.fromtimestamp(0)) -> Dict[str, datetime]:
+        last_post_dates = {}
+        all_posts = self.fetch_posts(after)['posts']
+        for post in all_posts.values():
+            user_id = post['user_id']
+            if user_id in user_ids:
+                create_at = datetime.fromtimestamp(post['create_at'] // 1000)
+                if user_id not in last_post_dates or create_at > last_post_dates[user_id]:
+                    last_post_dates[user_id] = create_at
+        return last_post_dates
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Fetch Mattermost data")
+    parser.add_argument("--url", type=str, required=True, help="Mattermost URL")
+    parser.add_argument("--token", type=str, required=True, help="Access Token")
+    parser.add_argument("--team", type=str, required=True, help="Team name")
+    parser.add_argument("--channel", type=str, required=True, help="Channel name")
+
+    args = parser.parse_args()
+
+    mm_channel = MattermostChannel(
+        {
+            "url": args.url,
+            "scheme": "https",
+            "port": 8065,
+            "token": args.token,
+        },
+        args.team, args.channel)
+
+    now = datetime.now()
+    start_time = now - timedelta(days=365)
+
+    user_ids = mm_channel.fetch_members()
+    print(f"All user IDs: {user_ids}")
+
+    all_posts = mm_channel.fetch_posts(after=start_time)
+    print(f"All posts since start time: {all_posts}")
+
+    last_post_dates = mm_channel.fetch_last_post_dates(user_ids, after=start_time)
+    print(f"Last post dates for each user: {last_post_dates}")
