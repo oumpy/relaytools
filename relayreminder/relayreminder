@@ -23,7 +23,7 @@ class MattermostChannel:
         self.members = self.fetch_members()
 
     def get_channel_id(self) -> str:
-        channels = self.mm_driver.channels.get_channels_for_team_by_name(self.team_name, self.channel_name)
+        channels = self.mm_driver.channels.get_channels_by_name_and_team_name(self.team_name, self.channel_name)
         for channel in channels:
             if channel['display_name'] == self.channel_name:
                 return channel['id']
@@ -52,6 +52,7 @@ class MattermostChannel:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Fetch Mattermost data")
     parser.add_argument("--url", type=str, required=True, help="Mattermost URL")
+    parser.add_argument("--port", type=int, default=8065, help="Mattermost Port")
     parser.add_argument("--token", type=str, required=True, help="Access Token")
     parser.add_argument("--team", type=str, required=True, help="Team name")
     parser.add_argument("--channel", type=str, required=True, help="Channel name")
@@ -62,7 +63,7 @@ if __name__ == "__main__":
         {
             "url": args.url,
             "scheme": "https",
-            "port": 8065,
+            "port": args.port,
             "token": args.token,
         },
         args.team, args.channel)
