@@ -23,11 +23,8 @@ class MattermostChannel:
         self.members = self.fetch_members()
 
     def get_channel_id(self) -> str:
-        channels = self.mm_driver.channels.get_channels_by_name_and_team_name(self.team_name, self.channel_name)
-        for channel in channels:
-            if channel['display_name'] == self.channel_name:
-                return channel['id']
-        return ""
+        channel = self.mm_driver.channels.get_channel_by_name_and_team_name(self.team_name, self.channel_name)
+        return channel['id']
 
     def fetch_members(self) -> List[str]:
         members = self.mm_driver.channels.get_channel_members(self.channel_id)
