@@ -49,6 +49,7 @@ class MattermostChannel:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Fetch Mattermost data")
     parser.add_argument("--url", type=str, required=True, help="Mattermost URL")
+    parser.add_argument("--scheme", type=str, default="https", help="Mattermost URL Scheme")
     parser.add_argument("--port", type=int, default=8065, help="Mattermost Port")
     parser.add_argument("--token", type=str, required=True, help="Access Token")
     parser.add_argument("--team", type=str, required=True, help="Team name")
@@ -59,7 +60,7 @@ if __name__ == "__main__":
     mm_channel = MattermostChannel(
         {
             "url": args.url,
-            "scheme": "https",
+            "scheme": args.scheme,
             "port": args.port,
             "token": args.token,
         },
