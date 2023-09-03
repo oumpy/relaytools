@@ -45,15 +45,29 @@ class MattermostChannel:
         posts = self.mm_driver.posts.get_posts_for_channel(self.channel_id, params={'since': int(after.timestamp() * 1000)})
         return posts
 
-    def fetch_last_post_dates(self, user_ids: List[str], after: datetime = datetime.fromtimestamp(0)) -> Dict[str, datetime]:
+    def fetch_last_post_dates(self, 
+                              user_ids: List[str], 
+                              after: datetime = datetime.fromtimestamp(0), 
+                              priority_filter: Optional[str] = None,
+                              is_thread_head: Optional[bool] = None) -> Dict[str, datetime]:
         last_post_dates = dict.fromkeys(user_ids, after)
         all_posts = self.fetch_posts(after)['posts']
+
+        if priority_filter:
+            priority_filter = priority_filter.lower()
+
         for post in all_posts.values():
             user_id = post['user_id']
+            create_at = datetime.fromtimestamp(post['create_at'] / 1000)
+            root_id = post.get('root_id', '')
+            priority = post['metadata'].get('priority', {}).get('priority', 'standard').lower()
+
             if user_id in user_ids:
-                create_at = datetime.fromtimestamp(post['create_at'] / 1000)
-                if user_id not in last_post_dates or create_at > last_post_dates[user_id]:
-                    last_post_dates[user_id] = create_at
+                if (priority_filter is None or priority == priority_filter) and \
+                   (is_thread_head is None or bool(root_id) == is_thread_head):
+                    if user_id not in last_post_dates or create_at > last_post_dates[user_id]:
+                        last_post_dates[user_id] = create_at
+
         return last_post_dates
 
     def send_post(self, message: str, props: Optional[Dict] = None):
