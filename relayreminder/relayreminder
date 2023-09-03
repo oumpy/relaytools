@@ -49,7 +49,8 @@ class MattermostChannel:
                               user_ids: List[str], 
                               after: datetime = datetime.fromtimestamp(0), 
                               priority_filter: Optional[str] = None,
-                              is_thread_head: Optional[bool] = None) -> Dict[str, datetime]:
+                              is_thread_head: Optional[bool] = None,
+                              ignore_deleted_posts: Optional[bool] = True) -> Dict[str, datetime]:
         last_post_dates = dict.fromkeys(user_ids, after)
         all_posts = self.fetch_posts(after)['posts']
 
@@ -61,6 +62,10 @@ class MattermostChannel:
             create_at = datetime.fromtimestamp(post['create_at'] / 1000)
             root_id = post.get('root_id', '')
             priority = post['metadata'].get('priority', {}).get('priority', 'standard').lower()
+
+            # Skip deleted post (optional)
+            if ignore_deleted_posts and post['delete_at'] != 0:
+                continue
 
             if user_id in user_ids:
                 if (priority_filter is None or priority == priority_filter) and \
