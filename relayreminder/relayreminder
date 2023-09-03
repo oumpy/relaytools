@@ -56,11 +56,16 @@ class MattermostChannel:
                     last_post_dates[user_id] = create_at
         return last_post_dates
 
-    def send_post(self, message: str):
-        self.mm_driver.posts.create_post({
+    def send_post(self, message: str, props: Optional[Dict] = None):
+        payload = {
             'channel_id': self.channel_id,
             'message': message,
-            })
+        }
+
+        if props:
+            payload['props'] = props
+
+        self.mm_driver.posts.create_post(payload)
 
 
 if __name__ == "__main__":
