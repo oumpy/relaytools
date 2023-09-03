@@ -64,7 +64,7 @@ class MattermostChannel:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Fetch Mattermost data")
+    parser = argparse.ArgumentParser(description="RelayReminder: the 3rd-generation bot-system for the relay-posts.")
     parser.add_argument("--url", type=str, required=True, help="Mattermost URL")
     parser.add_argument("--scheme", type=str, default="https", help="Mattermost URL Scheme")
     parser.add_argument("--port", type=int, default=443, help="Mattermost Port")
