@@ -9,9 +9,20 @@
 #
 
 from mattermostdriver import Driver
-from datetime import datetime, timedelta
+from datetime import datetime, date, timedelta
 import argparse
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Union
+
+def get_week_number(target_date: Union[datetime, date]) -> int:
+    base_date = date(1, 1, 3) # Monday
+
+    if isinstance(target_date, datetime):
+        target_date = target_date.date()
+        
+    delta_days = (target_date - base_date).days
+    week_number = delta_days // 7
+
+    return week_number
 
 class MattermostChannel:
     def __init__(self, driver_params: Dict, team_name: str, channel_name: str):
