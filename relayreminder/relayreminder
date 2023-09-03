@@ -30,10 +30,10 @@ class MattermostChannel:
         self.mm_driver.login()
         self.team_name = team_name
         self.channel_name = channel_name
-        self.channel_id = self.get_channel_id()
+        self.channel_id = self._get_channel_id()
         self.members = self.fetch_members()
 
-    def get_channel_id(self) -> str:
+    def _get_channel_id(self) -> str:
         channel = self.mm_driver.channels.get_channel_by_name_and_team_name(self.team_name, self.channel_name)
         return channel['id']
 
