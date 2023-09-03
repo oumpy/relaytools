@@ -46,13 +46,15 @@ class MattermostChannel:
         return posts
 
     def fetch_last_post_dates(self, 
-                              user_ids: List[str],
+                              user_ids: Optional[List[str]] = None,
                               all_posts: Optional[Dict] = None, # obtained by self.fetch_posts()['posts']
                               after: datetime = datetime.fromtimestamp(0), 
                               priority_filter: Optional[str] = None,
                               is_thread_head: Optional[bool] = None,
                               ignore_deleted_posts: Optional[bool] = True) -> Dict[str, datetime]:
         last_post_dates = dict.fromkeys(user_ids, after)
+        if user_ids is None:
+            user_ids = self.members
         if all_posts is None:
             all_posts = self.fetch_posts(after)['posts']
 
