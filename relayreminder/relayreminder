@@ -56,6 +56,12 @@ class MattermostChannel:
                     last_post_dates[user_id] = create_at
         return last_post_dates
 
+    def send_post(self, message: str):
+        self.mm_driver.posts.create_post({
+            'channel_id': self.channel_id,
+            'message': message,
+            })
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Fetch Mattermost data")
