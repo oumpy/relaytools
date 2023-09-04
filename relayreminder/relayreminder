@@ -12,6 +12,7 @@ from mattermostdriver import Driver
 from datetime import datetime, date, timedelta
 import argparse
 from typing import List, Dict, Optional, Union
+import warnings
 
 def get_week_number(target_date: Union[datetime, date]) -> int:
     base_date = date(1, 1, 3) # Monday
@@ -64,7 +65,7 @@ class MattermostChannel:
         if priority_filter:
             priority_filter = priority_filter.lower()
 
-        for post in self.all_posts.values():
+        for post in self.all_posts['posts'].values():
             user_id = post['user_id']
             create_at = datetime.fromtimestamp(post['create_at'] / 1000)
             root_id = post.get('root_id', '')
@@ -82,7 +83,7 @@ class MattermostChannel:
 
         return last_post_dates
 
-    def send_post(self, message: str, props: Optional[Dict] = None):
+    def send_post(self, message: str, props: Optional[Dict] = None, root_id: Optional[str] = None):
         payload = {
             'channel_id': self.channel_id,
             'message': message,
@@ -90,6 +91,12 @@ class MattermostChannel:
 
         if props:
             payload['props'] = props
+
+        if root_id:
+            if root_id in self.all_posts['posts']:
+                payload['root_id'] = root_id
+            else:
+                warnings.warn(f"Given root_id '{root_id}' does not exist in fetched posts. Posting directly to the channel.")
 
         self.mm_driver.posts.create_post(payload)
 
