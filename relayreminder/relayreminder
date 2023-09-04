@@ -13,6 +13,7 @@ from datetime import datetime, date, timedelta
 import argparse
 from typing import List, Dict, Optional, Union, Any
 import warnings
+import yaml
 
 BASE_TIME = datetime(1,1,3)
 BASE_DATE = BASE_TIME.date() # Monday
@@ -34,6 +35,7 @@ class MattermostChannel:
         self.channel_name = channel_name
         self.channel_id = self._get_channel_id()
         self.members = self.fetch_members()
+        self.usernames = self.fetch_usernames()
         self.after_time = after_time
         self.all_posts = {'order': [], 'posts': {}}
 
@@ -44,6 +46,28 @@ class MattermostChannel:
     def fetch_members(self) -> List[str]:
         members = self.mm_driver.channels.get_channel_members(self.channel_id)
         return [member['user_id'] for member in members]
+
+    def fetch_usernames(self) -> Dict[str, str]:
+        """
+        Fetch usernames based on member user_ids.
+        
+        Returns:
+            A dictionary where keys are user_ids and values are corresponding usernames.
+        """
+        usernames = {}
+        for user_id in self.members:
+            user = self.mm_driver.users.get_user(user_id)
+            usernames[user_id] = user['username']
+        return usernames
+
+    def get_username_by_id(self, user_id: str) -> Optional[str]:
+        """
+        Get the username for a given user_id using the self.usernames dictionary.
+        
+        Returns:
+            Username corresponding to the user_id or None if not found.
+        """
+        return self.usernames.get(user_id, None)
 
     def fetch_posts(self) -> Dict:
         posts = self.mm_driver.posts.get_posts_for_channel(self.channel_id, params={'since': int(self.after_time.timestamp() * 1000)})
@@ -117,8 +141,89 @@ class MattermostChannel:
         filtered_posts = {post_id: post for post_id, post in posts.items() if match_criteria(post, criteria)}
         return filtered_posts
 
+def parse_arguments() -> argparse.Namespace:
+    """
+    Parse command line arguments and return the Namespace object.
+    """
+    parser = argparse.ArgumentParser(description="RelayReminder: the 3rd-generation bot-system for the relay-posts.")
+    parser.add_argument("--url", type=str, required=True, help="Mattermost URL")
+    parser.add_argument("--scheme", type=str, default="https", help="Mattermost URL Scheme")
+    parser.add_argument("--port", type=int, default=443, help="Mattermost Port")
+    parser.add_argument("--token", type=str, required=True, help="Access Token")
+    parser.add_argument("--team", type=str, required=True, help="Team name")
+    parser.add_argument("--channel", type=str, required=True, help="Channel name")
+    parser.add_argument("--all-users", action="store_true", help="Notify all users including ones with no posts")
+    parser.add_argument("--yaml-file", type=str, required=True, help="Path to the YAML file containing reminder messages and their week intervals.")
+    return parser.parse_args()
+
+def main(args: argparse.Namespace):
+    driver_params = {
+        "url": args.url,
+        "scheme": args.scheme,
+        "port": args.port,
+        "token": args.token
+    }
+    mm_channel = MattermostChannel(driver_params, args.team, args.channel)
+    
+    # Fetch all posts
+    mm_channel.fetch_posts()
+
+    # Fetch last post dates for all members
+    last_post_dates = mm_channel.fetch_last_post_dates(priority_filter="standard", is_thread_head=True)
+    
+    # Convert dates to week numbers
+    last_post_weeks = {user_id: get_week_number(date) for user_id, date in last_post_dates.items()}
+    current_week_number = get_week_number(datetime.now())
+
+    # Load YAML data
+    with open(args.yaml_file, "r") as file:
+        yaml_data = yaml.safe_load(file)
+
+    # Find users and message based on last post week number
+    users_to_notify = {}
+    for user_id, week in last_post_weeks.items():
+        passed_weeks = current_week_number - week
+        if passed_weeks in yaml_data:
+            if week not in users_to_notify:
+                users_to_notify[week] = []
+            users_to_notify[week].append(user_id)
+
+    # Post messages
+    for week, user_ids in users_to_notify.items():
+        # Skip users with no posts unless specified
+        if week == 0 and not args.all_users:
+            continue
+
+        passed_weeks = current_week_number - week
+        criteria = {
+            "props": {
+                "last_post_week": week,
+                "passed_weeks": passed_weeks
+            }
+        }
+        matching_posts = mm_channel.filter_posts_by_criteria(criteria)
+        
+        # Find the matching post with maximum weeks passed
+        max_passed_weeks = max(post['props']['passed_weeks'] for post in matching_posts.values())
+        max_week_limit = max(yaml_data.keys())
+
+        message_start = yaml_data[passed_weeks].format(passed_weeks)
+        sorted_user_ids = sorted(user_ids, key=lambda uid: last_post_dates[uid])
+        mentions = '\n'.join([f'@{mm_channel.get_username_by_id(user_id)}' for user_id in sorted_user_ids])
+
+        message = f"{message_start}\n\n{mentions}"
+
+        if passed_weeks < max_passed_weeks and week + max_week_limit <= current_week_number:
+            root_id = next(iter(matching_posts))  # Getting the first matching post's ID as root
+            mm_channel.send_post(message, props=criteria['props'], root_id=root_id)
+        else:
+            mm_channel.send_post(message, props=criteria['props'])
 
 if __name__ == "__main__":
+    args = parse_arguments()
+    main(args)
+
+if False:
     parser = argparse.ArgumentParser(description="RelayReminder: the 3rd-generation bot-system for the relay-posts.")
     parser.add_argument("--url", type=str, required=True, help="Mattermost URL")
     parser.add_argument("--scheme", type=str, default="https", help="Mattermost URL Scheme")
