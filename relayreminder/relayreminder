@@ -166,6 +166,12 @@ def load_tsv_data(file_path: str) -> Dict[int, str]:
             data[week_number] = parts[1]
     return data
 
+def get_start_of_week_n_weeks_ago(n: int) -> datetime:
+    today = datetime.now().date()  # 現在の日付を取得
+    start_of_this_week = today - timedelta(days=today.weekday())  # 週の初めの日付を取得
+    target_date = start_of_this_week - timedelta(weeks=n)  # n週前の日付を取得
+    return datetime(target_date.year, target_date.month, target_date.day)
+
 def parse_arguments() -> argparse.Namespace:
     """
     Parse command line arguments and return the Namespace object.
@@ -188,20 +194,22 @@ def main(args: argparse.Namespace):
         "port": args.port,
         "token": args.token
     }
-    mm_channel = MattermostChannel(driver_params, args.team, args.channel)
-    
+    # Load message data
+    message_data = load_tsv_data(args.message_file)
+    max_week_limit = max(message_data.keys())
+
+    mm_channel = MattermostChannel(
+        driver_params, args.team, args.channel,
+        after_time = get_start_of_week_n_weeks_ago(max_week_limit),
+        )    
     # Fetch all posts
     mm_channel.fetch_posts()
-
     # Fetch last post dates for all members
     last_post_dates = mm_channel.fetch_last_post_dates(priority_filter="standard", is_thread_head=True)
     
     # Convert dates to week numbers
     last_post_weeks = {user_id: get_week_number(date) for user_id, date in last_post_dates.items()}
     current_week_number = get_week_number(datetime.now())
-
-    # Load message data
-    message_data = load_tsv_data(args.message_file)
 
     # Find users and message based on last post week number
     users_to_notify = {}
@@ -229,7 +237,6 @@ def main(args: argparse.Namespace):
         
         # Find the matching post with maximum weeks passed
         max_passed_weeks = max(post['props']['passed_weeks'] for post in matching_posts.values())
-        max_week_limit = max(message_data.keys())
 
         message_start = message_data[passed_weeks].format(passed_weeks)
         sorted_user_ids = sorted(user_ids, key=lambda uid: last_post_dates[uid])
