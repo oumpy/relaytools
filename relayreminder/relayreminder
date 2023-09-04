@@ -11,7 +11,7 @@
 from mattermostdriver import Driver
 from datetime import datetime, date, timedelta
 import argparse
-from typing import List, Dict, Optional, Union
+from typing import List, Dict, Optional, Union, Any
 import warnings
 
 def get_week_number(target_date: Union[datetime, date]) -> int:
@@ -97,6 +97,24 @@ class MattermostChannel:
                 warnings.warn(f"Given root_id '{root_id}' does not exist in fetched posts. Posting directly to the channel.")
 
         self.mm_driver.posts.create_post(payload)
+
+    def filter_posts_by_criteria(self, criteria: Dict[str, Any], posts: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        if posts is None:
+            posts = self.all_posts['posts']
+
+        def match_criteria(data: Dict[str, Any], criteria: Dict[str, Any]) -> bool:
+            for key, value in criteria.items():
+                if key not in data:
+                    return False
+                if isinstance(value, dict):
+                    if not match_criteria(data[key], value):
+                        return False
+                elif data[key] != value:
+                    return False
+            return True
+
+        filtered_posts = {post_id: post for post_id, post in posts.items() if match_criteria(post, criteria)}
+        return filtered_posts
 
 
 if __name__ == "__main__":
