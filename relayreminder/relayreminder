@@ -34,7 +34,7 @@ class MattermostChannel:
         self.channel_id = self._get_channel_id()
         self.members = self.fetch_members()
         self.after_time = after_time
-        self.all_posts = None  # Initialize to None
+        self.all_posts = {'order': [], 'posts': {}}
 
     def _get_channel_id(self) -> str:
         channel = self.mm_driver.channels.get_channel_by_name_and_team_name(self.team_name, self.channel_name)
@@ -57,8 +57,6 @@ class MattermostChannel:
 
         if user_ids is None:
             user_ids = self.members
-        if self.all_posts is None:
-            self.fetch_posts()  # If all_posts is None, fetch the posts
 
         last_post_dates = dict.fromkeys(user_ids, self.after_time)
 
