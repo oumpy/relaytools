@@ -27,7 +27,7 @@ def get_week_number(target_date: Union[datetime, date]) -> int:
     return week_number
 
 class MattermostChannel:
-    def __init__(self, driver_params: Dict, team_name: str, channel_name: str, after_time: datetime = datetime.fromtimestamp(0)):
+    def __init__(self, driver_params: Dict, team_name: str, channel_name: str, after_time: datetime = datetime.fromtimestamp(0), stdout_mode: bool = False):
         self.mm_driver = Driver(driver_params)
         self.mm_driver.login()
         self.team_name = team_name
@@ -37,6 +37,7 @@ class MattermostChannel:
         self.usernames = self.fetch_usernames()
         self.after_time = after_time
         self.all_posts = {'order': [], 'posts': {}}
+        self.stdout_mode = stdout_mode
 
     def _get_channel_id(self) -> str:
         channel = self.mm_driver.channels.get_channel_by_name_and_team_name(self.team_name, self.channel_name)
@@ -105,7 +106,7 @@ class MattermostChannel:
 
         return last_post_dates
 
-    def send_post(self, message: str, props: Optional[Dict] = None, root_id: Optional[str] = None):
+    def send_post(self, message: str, props: Optional[Dict] = None, root_id: Optional[str] = None) -> Dict:
         payload = {
             'channel_id': self.channel_id,
             'message': message,
@@ -120,7 +121,13 @@ class MattermostChannel:
             else:
                 warnings.warn(f"Given root_id '{root_id}' does not exist in fetched posts. Posting directly to the channel.")
 
-        self.mm_driver.posts.create_post(payload)
+        if self.stdout_mode:
+            print(payload)
+        else:
+            self.mm_driver.posts.create_post(payload)
+        
+        return payload
+
 
     def filter_posts_by_criteria(self, criteria: Dict[str, Any], posts: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         if posts is None:
@@ -185,6 +192,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--channel", type=str, required=True, help="Channel name")
     parser.add_argument("--all-users", action="store_true", help="Notify all users including ones with no posts")
     parser.add_argument("--message-file", type=str, required=True, help="Path to the TSV file containing week intervals & reminder messages.")
+    parser.add_argument("--stdout-mode", action="store_true", help="Post to stdout, instead of the Mattermost channel.")
     return parser.parse_args()
 
 def main(args: argparse.Namespace):
@@ -201,6 +209,7 @@ def main(args: argparse.Namespace):
     mm_channel = MattermostChannel(
         driver_params, args.team, args.channel,
         after_time = get_start_of_week_n_weeks_ago(max_week_limit),
+        stdout_mode = args.stdout_mode,
         )    
     # Fetch all posts
     mm_channel.fetch_posts()
