@@ -117,9 +117,8 @@ class MattermostChannel:
             payload['props'] = props
 
         if root_id:
-            if root_id in self.all_posts['posts']:
-                payload['root_id'] = root_id
-            else:
+            payload['root_id'] = root_id
+            if not root_id in self.all_posts['posts']:
                 warnings.warn(f"Given root_id '{root_id}' does not exist in fetched posts. Posting directly to the channel.")
 
         if self.stdout_mode:
