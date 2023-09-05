@@ -175,9 +175,9 @@ def load_tsv_data(file_path: str) -> Dict[int, str]:
     return data
 
 def get_start_of_week_n_weeks_ago(n: int) -> datetime:
-    today = datetime.now().date()  # 現在の日付を取得
-    start_of_this_week = today - timedelta(days=today.weekday())  # 週の初めの日付を取得
-    target_date = start_of_this_week - timedelta(weeks=n)  # n週前の日付を取得
+    today = datetime.now().date()  # Get today
+    start_of_this_week = today - timedelta(days=today.weekday())  # Get Monday of this week
+    target_date = start_of_this_week - timedelta(weeks=n)  # Get Monday n-weeks ago
     return datetime(target_date.year, target_date.month, target_date.day)
 
 def parse_arguments() -> argparse.Namespace:
