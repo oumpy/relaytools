@@ -223,11 +223,9 @@ def main(args: argparse.Namespace):
     # Find users and message based on last post week number
     users_to_notify = {}
     for user_id, week in last_post_weeks.items():
-        passed_weeks = current_week_number - week
-        if passed_weeks in message_data:
-            if week not in users_to_notify:
-                users_to_notify[week] = []
-            users_to_notify[week].append(user_id)
+        if week not in users_to_notify:
+            users_to_notify[week] = []
+        users_to_notify[week].append(user_id)
 
     # Post messages
     for week, user_ids in users_to_notify.items():
