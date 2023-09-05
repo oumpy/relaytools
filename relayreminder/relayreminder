@@ -13,6 +13,7 @@ from datetime import datetime, date, timedelta
 import argparse
 from typing import List, Dict, Optional, Union, Any
 import warnings
+from bisect import bisect_left, bisect_right
 
 BASE_TIME = datetime(1,1,3)
 BASE_DATE = BASE_TIME.date() # Monday
@@ -204,18 +205,19 @@ def main(args: argparse.Namespace):
     }
     # Load message data
     message_data = load_tsv_data(args.message_file)
-    max_week_limit = max(message_data.keys())
+    message_passed_weeks_list = sorted(message_data.keys())
+    max_week_limit = message_passed_weeks_list[-1]
 
     mm_channel = MattermostChannel(
         driver_params, args.team, args.channel,
         after_time = get_start_of_week_n_weeks_ago(max_week_limit),
         stdout_mode = args.stdout_mode,
-        )    
+    )    
     # Fetch all posts
     mm_channel.fetch_posts()
     # Fetch last post dates for all members
     last_post_dates = mm_channel.fetch_last_post_dates(priority_filter="standard", is_thread_head=True)
-    
+
     # Convert dates to week numbers
     last_post_weeks = {user_id: get_week_number(date) for user_id, date in last_post_dates.items()}
     current_week_number = get_week_number(datetime.now())
@@ -237,25 +239,42 @@ def main(args: argparse.Namespace):
         criteria = {
             "props": {
                 "last_post_week": week,
-                "passed_weeks": passed_weeks
             }
         }
         matching_posts = mm_channel.filter_posts_by_criteria(criteria)
-        
         # Find the matching post with maximum weeks passed
-        max_passed_weeks = max(post['props']['passed_weeks'] for post in matching_posts.values())
-
-        message_start = message_data[passed_weeks].format(passed_weeks)
-        sorted_user_ids = sorted(user_ids, key=lambda uid: last_post_dates[uid])
-        mentions = '\n'.join([f'@{mm_channel.get_username_by_id(user_id)}' for user_id in sorted_user_ids])
-
-        message = f"{message_start}\n\n{mentions}"
-
-        if passed_weeks < max_passed_weeks and week + max_week_limit <= current_week_number:
-            root_id = next(iter(matching_posts))  # Getting the first matching post's ID as root
-            mm_channel.send_post(message, props=criteria['props'], root_id=root_id)
+        if matching_posts:
+            last_passed_weeks = max(post['props']['passed_weeks'] for post in matching_posts.values())
         else:
-            mm_channel.send_post(message, props=criteria['props'])
+            last_passed_weeks = -1
+
+        passed_weeks_k = bisect_right(message_passed_weeks_list, passed_weeks)
+        if passed_weeks_k == 0:
+            continue
+        passed_weeks_to_post = message_passed_weeks_list[passed_weeks_k-1]
+
+        if passed_weeks_to_post > last_passed_weeks:
+            message_start = message_data[passed_weeks_to_post].format(passed_weeks)
+            sorted_user_ids = sorted(user_ids, key=lambda uid: last_post_dates[uid])
+            mentions = '\n'.join([f'@{mm_channel.get_username_by_id(user_id)}' for user_id in sorted_user_ids])
+
+            message = f"{message_start}\n\n{mentions}"
+
+            if last_passed_weeks >= 0:
+                root_id = matching_posts[0]['root_id']  # Getting the first matching post's ID as root
+                if root_id == '':
+                    root_id = matching_posts[0]['id']
+            else:
+                root_id = None
+
+            mm_channel.send_post(
+                message,
+                props={
+                    "last_post_week": week,
+                    "passed_weeks": passed_weeks,
+                },
+                root_id=root_id,
+            )
 
 if __name__ == "__main__":
     args = parse_arguments()
