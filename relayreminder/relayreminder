@@ -128,8 +128,7 @@ class MattermostChannel:
         
         return payload
 
-
-    def filter_posts_by_criteria(self, criteria: Dict[str, Any], posts: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def filter_posts_by_criteria(self, criteria: Dict[str, Any], posts: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         if posts is None:
             posts = self.all_posts['posts']
 
@@ -144,8 +143,13 @@ class MattermostChannel:
                     return False
             return True
 
-        filtered_posts = {post_id: post for post_id, post in posts.items() if match_criteria(post, criteria)}
-        return filtered_posts
+        # Filter the posts based on criteria
+        filtered_posts = [post for post in posts.values() if match_criteria(post, criteria)]
+
+        # Sort the posts in ascending order based on the 'create_at' timestamp
+        sorted_filtered_posts = sorted(filtered_posts, key=lambda post: post['create_at'])
+
+        return sorted_filtered_posts
 
     def unfollow_thread_for_user(self, post_id: str, user_id: str):
         """
@@ -261,7 +265,7 @@ def main(args: argparse.Namespace):
         }
         matching_posts = mm_channel.filter_posts_by_criteria(criteria)
         # Find the matching post with maximum weeks passed
-        last_passed_weeks = max([post['props']['passed_weeks'] for post in matching_posts.values()], default=-1)
+        last_passed_weeks = max([post['props']['passed_weeks'] for post in matching_posts], default=-1)
 
         passed_weeks_k = bisect_right(message_passed_weeks_list, passed_weeks)
         if passed_weeks_k == 0:
@@ -276,10 +280,10 @@ def main(args: argparse.Namespace):
             message = f"{message_start}\n\n{mentions}"
 
             if matching_posts:
-                post = matching_posts[0]
+                post = matching_posts[-1]
                 post_id = post['id']
                 root_id = post.get('root_id', post_id)
-                for user_id in post['props']['users']:
+                for user_id in set(post['props']['users']) - set(sorted_user_ids):
                     mm_channel.unfollow_thread_for_user(post_id, user_id)
             else:
                 root_id = None
@@ -289,6 +293,7 @@ def main(args: argparse.Namespace):
                 props={
                     "last_post_week": week,
                     "passed_weeks": passed_weeks,
+                    "users": sorted_user_ids,
                 },
                 root_id=root_id,
             )
