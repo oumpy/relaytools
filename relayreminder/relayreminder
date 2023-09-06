@@ -101,7 +101,7 @@ class MattermostChannel:
 
             if user_id in user_ids:
                 if (priority_filter is None or priority == priority_filter) and \
-                   (is_thread_head is None or bool(root_id) == is_thread_head):
+                   (is_thread_head is None or bool(root_id) != is_thread_head):
                     if user_id not in last_post_dates or create_at > last_post_dates[user_id]:
                         last_post_dates[user_id] = create_at
 
