@@ -211,7 +211,7 @@ def main(args: argparse.Namespace):
         driver_params, args.team, args.channel,
         after_time = get_start_of_week_n_weeks_ago(max_week_limit),
         stdout_mode = args.stdout_mode,
-    )    
+    )
     # Fetch all posts
     mm_channel.fetch_posts()
     # Fetch last post dates for all members
