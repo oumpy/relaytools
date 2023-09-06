@@ -147,6 +147,24 @@ class MattermostChannel:
         filtered_posts = {post_id: post for post_id, post in posts.items() if match_criteria(post, criteria)}
         return filtered_posts
 
+    def unfollow_thread_for_user(self, post_id: str, user_id: str):
+        """
+        Unfollow a thread for a specific user.
+
+        Args:
+            post_id (str): The ID of a post within the thread.
+            user_id (str): The ID of the user whose follow status should be changed.
+        """
+        # If in stdout_mode, print the action and return
+        if self.stdout_mode:
+            print(f"Unfollow action called for post ID '{post_id}' for user ID '{user_id}'")
+            return None
+
+        # Actually perform the unfollow action
+        result = self.mm_driver.posts.unfollow_post_for_user(user_id, post_id)
+        return result
+
+
 def load_tsv_data(file_path: str) -> Dict[int, str]:
     data = {}
     with open(file_path, 'r', encoding='utf-8') as f:
