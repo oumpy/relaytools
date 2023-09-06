@@ -252,7 +252,7 @@ def main(args: argparse.Namespace):
     print(*sorted([(current_week_number - week, [mm_channel.get_username_by_id(userid) for userid in userids]) for week, userids in users_to_notify.items()]),sep='\n')
 
     # Post messages
-    for week, user_ids in users_to_notify.items():
+    for week, user_ids in sorted(users_to_notify.items(), key=lambda x: -x[0]):
         # Skip users with no posts unless specified
         if week == 0 and not args.all_users:
             continue
