@@ -261,10 +261,7 @@ def main(args: argparse.Namespace):
         }
         matching_posts = mm_channel.filter_posts_by_criteria(criteria)
         # Find the matching post with maximum weeks passed
-        if matching_posts:
-            last_passed_weeks = max(post['props']['passed_weeks'] for post in matching_posts.values())
-        else:
-            last_passed_weeks = -1
+        last_passed_weeks = max([post['props']['passed_weeks'] for post in matching_posts.values()], default=-1)
 
         passed_weeks_k = bisect_right(message_passed_weeks_list, passed_weeks)
         if passed_weeks_k == 0:
@@ -278,10 +275,12 @@ def main(args: argparse.Namespace):
 
             message = f"{message_start}\n\n{mentions}"
 
-            if last_passed_weeks >= 0:
-                root_id = matching_posts[0]['root_id']  # Getting the first matching post's ID as root
-                if root_id == '':
-                    root_id = matching_posts[0]['id']
+            if matching_posts:
+                post = matching_posts[0]
+                post_id = post['id']
+                root_id = post.get('root_id', post_id)
+                for user_id in post['props']['users']:
+                    mm_channel.unfollow_thread_for_user(post_id, user_id)
             else:
                 root_id = None
 
