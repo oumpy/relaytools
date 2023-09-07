@@ -119,7 +119,22 @@ class MattermostChannel:
                     if user_id not in last_post_dates or create_at > last_post_dates[user_id]:
                         last_post_dates[user_id] = create_at
 
+        # Check channel-join-date.
+        if (priority_filter is None or priority_filter == 'standard') and \
+           (is_thread_head is None or is_thread_head):
+            for user_id, post_date in last_post_dates.items():
+                if post_date == BASE_TIME:
+                    join_date = self.fetch_join_date(user_id)
+                    if join_date:
+                        last_post_dates[user_id] = join_date
+
         return last_post_dates
+
+    def fetch_join_date(self, user_id: str) -> datetime:
+        """Fetch the date when a user joined the channel."""
+        member_info = self.mm_driver.channels.get_channel_member(self.channel_id, user_id)
+        join_date = datetime.fromtimestamp(member_info['create_at'] / 1000)
+        return join_date
 
     def send_post(self, message: str, props: Optional[Dict] = None, root_id: Optional[str] = None) -> Dict:
         payload = {
