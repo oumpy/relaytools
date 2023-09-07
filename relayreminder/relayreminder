@@ -40,6 +40,7 @@ def get_week_number(target_date: Union[datetime, date]) -> int:
 
     return week_number
 
+Anything = object()
 class MattermostChannel:
     def __init__(self, driver_params: Dict, team_name: str, channel_name: str, after_time: datetime = datetime.fromtimestamp(0), stdout_mode: bool = False):
         self.mm_driver = Driver(driver_params)
@@ -149,8 +150,13 @@ class MattermostChannel:
             for key, value in criteria.items():
                 if key not in data:
                     return False
-                if isinstance(value, dict):
+                elif value is Anything:
+                    continue
+                elif isinstance(value, dict):
                     if not match_criteria(data[key], value):
+                        return False
+                elif isinstance(value, (set, list)) and isinstance(data[key], (set, list)):
+                    if not set(value).issubset(data[key]):
                         return False
                 elif data[key] != value:
                     return False
