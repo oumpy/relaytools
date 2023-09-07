@@ -133,9 +133,20 @@ class MattermostChannel:
         return last_post_dates
 
     def fetch_join_date(self, user_id: str) -> datetime:
-        """Fetch the date when a user joined the channel."""
-        member_info = self.mm_driver.channels.get_channel_member(self.channel_id, user_id)
-        join_date = datetime.fromtimestamp(member_info['create_at'] / 1000)
+        """Fetch the date when a user joined the channel using system messages."""
+
+        filtered_posts = self.filter_posts_by_criteria(
+            {
+                "type": "system_join",
+                "user_id": user_id,
+            }
+        )
+        if filtered_posts:
+            post = filtered_posts[0]
+            join_date = datetime.fromtimestamp(post["create_at"] / 1000)
+        else:
+            join_date = BASE_TIME
+
         return join_date
 
     def send_post(self, message: str, props: Optional[Dict] = None, root_id: Optional[str] = None) -> Dict:
