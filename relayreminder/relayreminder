@@ -15,6 +15,8 @@ from typing import List, Dict, Optional, Union, Any
 import warnings
 from bisect import bisect_left, bisect_right
 
+APP_NAME = "RelayReminder"
+
 BASE_TIME = datetime(1,1,3)
 BASE_DATE = BASE_TIME.date() # Monday
 
@@ -294,6 +296,7 @@ def main(args: argparse.Namespace):
         passed_weeks = current_week_number - week
         criteria = {
             "props": {
+                "bot_app": APP_NAME,
                 "last_post_week": week,
             }
         }
@@ -325,6 +328,7 @@ def main(args: argparse.Namespace):
             mm_channel.send_post(
                 message,
                 props={
+                    "bot_app": APP_NAME,
                     "last_post_week": week,
                     "passed_weeks": passed_weeks,
                     "users": sorted_user_ids,
