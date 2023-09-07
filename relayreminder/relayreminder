@@ -134,20 +134,30 @@ class MattermostChannel:
 
     def fetch_join_date(self, user_id: str) -> datetime:
         """Fetch the date when a user joined the channel using system messages."""
-
-        filtered_posts = self.filter_posts_by_criteria(
+        criteria = [
             {
-                "type": "system_join",
+                "type": "system_join_channel",
                 "user_id": user_id,
-            }
+            },
+            {
+                "type": "system_add_to_channel",
+                "props": {"addedUserId": user_id,},
+            },
+        ]
+        filtered_posts = [
+            self.filter_posts_by_criteria(criterion) for criterion in criteria
+        ]
+        join_time_milliseconds = max(
+            (posts + [{"create_at": 0}])[0]["create_at"] for posts in filtered_posts
         )
-        if filtered_posts:
-            post = filtered_posts[0]
-            join_date = datetime.fromtimestamp(post["create_at"] / 1000)
+        if join_time_milliseconds == 0:
+            join_time = BASE_TIME
         else:
-            join_date = BASE_TIME
+            join_time = datetime.fromtimestamp(join_time_milliseconds / 1000)
 
-        return join_date
+        # print(self.get_username_by_id(user_id),":",join_time)
+
+        return join_time
 
     def send_post(self, message: str, props: Optional[Dict] = None, root_id: Optional[str] = None) -> Dict:
         payload = {
