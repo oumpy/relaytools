@@ -336,7 +336,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--mm-url", default=os.environ.get("RELAYREMINDER_MM_URL", "localhost"), help='Mattermost server URL')
     parser.add_argument("--scheme", type=str, default=os.environ.get("RELAYREMINDER_SCHEME", "https"), help="Mattermost URL Scheme")
     parser.add_argument("--port", type=int, default=int(os.environ.get("RELAYREMINDER_PORT", 443)), help="Mattermost Port")
-    parser.add_argument("--token", type=str, default=os.environ.get("RELAYREMINDER_TOKEN"), required=True, help="Access Token")
+    parser.add_argument("--bot-token", type=str, default=os.environ.get("RELAYREMINDER_BOT_TOKEN"), required=True, help="Access Token")
     parser.add_argument("--team", type=str, default=os.environ.get("RELAYREMINDER_TEAM"), required=True, help="Team name")
     parser.add_argument("--channel", type=str, default=os.environ.get("RELAYREMINDER_CHANNEL"), required=True, help="Channel name")
     parser.add_argument("--message-file", type=str, default=os.environ.get("RELAYREMINDER_MESSAGE_FILE"), required=True, help="Path to the TSV file containing week intervals & reminder messages.")
@@ -355,7 +355,7 @@ def main(args: argparse.Namespace):
         "url": args.mm_url,
         "scheme": args.scheme,
         "port": args.port,
-        "token": args.token
+        "token": args.bot_token
     }
     # Load message data
     message_data = load_tsv_data(args.message_file)
