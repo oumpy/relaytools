@@ -326,20 +326,21 @@ def parse_arguments() -> argparse.Namespace:
     """
     Parse command line arguments and return the Namespace object.
     """
-    env_path = os.path.join(os.path.expanduser("~"), ".relayreminder", "env")
+    app_dir = os.path.join(os.path.expanduser("~"), ".relayreminder")
+    env_path = os.path.join(app_dir, "env")
     load_dotenv(dotenv_path=env_path)
 
     parser = argparse.ArgumentParser(description="RelayReminder: the 3rd-generation bot-system for the relay-posts.")
 
     # Use os.environ.get() to obtain default values from environment variables for each option
+    parser.add_argument("--bot-token", type=str, default=os.environ.get("RELAYREMINDER_BOT_TOKEN"), help="Access Token")
     parser.add_argument("--app-name", default=os.environ.get("RELAYREMINDER_APP_NAME", "RelayReminder"), help='Application name')
     parser.add_argument("--mm-url", default=os.environ.get("RELAYREMINDER_MM_URL", "localhost"), help='Mattermost server URL')
     parser.add_argument("--scheme", type=str, default=os.environ.get("RELAYREMINDER_SCHEME", "https"), help="Mattermost URL Scheme")
     parser.add_argument("--port", type=int, default=int(os.environ.get("RELAYREMINDER_PORT", 443)), help="Mattermost Port")
-    parser.add_argument("--bot-token", type=str, default=os.environ.get("RELAYREMINDER_BOT_TOKEN"), required=True, help="Access Token")
-    parser.add_argument("--team", type=str, default=os.environ.get("RELAYREMINDER_TEAM"), required=True, help="Team name")
-    parser.add_argument("--channel", type=str, default=os.environ.get("RELAYREMINDER_CHANNEL"), required=True, help="Channel name")
-    parser.add_argument("--message-file", type=str, default=os.environ.get("RELAYREMINDER_MESSAGE_FILE"), required=True, help="Path to the TSV file containing week intervals & reminder messages.")
+    parser.add_argument("--team", type=str, default=os.environ.get("RELAYREMINDER_TEAM", "main"), help="Team name")
+    parser.add_argument("--channel", type=str, default=os.environ.get("RELAYREMINDER_CHANNEL", "RelayPosts"), help="Channel name")
+    parser.add_argument("--message-file", type=str, default=os.environ.get("RELAYREMINDER_MESSAGE_FILE", os.path.join(app_dir, "messages.tsv")), help="Path to the TSV file containing week intervals & reminder messages.")
     parser.add_argument("--mention-format", type=str, default=os.environ.get("RELAYREMINDER_MENTION_FORMAT", "{}"), help="Path to the TSV file containing week intervals & reminder messages.")
     parser.add_argument("--stdout-mode", action="store_true", 
                         default=bool(strtobool(os.environ.get("RELAYREMINDER_STDOUT_MODE", "false"))),
