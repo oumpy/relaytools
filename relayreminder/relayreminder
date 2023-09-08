@@ -44,7 +44,13 @@ def get_week_number(target_date: Union[datetime, date]) -> int:
 
 Anything = object()
 class MattermostChannel:
-    def __init__(self, driver_params: Dict, team_name: str, channel_name: str, after_time: datetime = datetime.fromtimestamp(0), stdout_mode: bool = False):
+    def __init__(self,
+        driver_params: Dict,
+        team_name: str,
+        channel_name: str,
+        after_time: datetime = BASE_TIME,
+        stdout_mode: bool = False,
+    ):
         self.mm_driver = Driver(driver_params)
         self.mm_driver.login()
         self.team_name = team_name
