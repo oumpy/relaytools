@@ -322,14 +322,15 @@ def get_start_of_week(n: int) -> datetime:
     target_time = BASE_TIME + timedelta(weeks=n)  # Get Monday of n-th week
     return target_time
 
-def parse_args() -> argparse.Namespace:
-    """
-    Parse command line arguments and return the Namespace object.
-    """
+def load_envs():
     app_dir = os.path.join(os.path.expanduser("~"), ".relayreminder")
     env_path = os.path.join(app_dir, "env")
     load_dotenv(dotenv_path=env_path)
 
+def parse_args() -> argparse.Namespace:
+    """
+    Parse command line arguments and return the Namespace object.
+    """
     parser = argparse.ArgumentParser(description="RelayReminder: the 3rd-generation bot-system for the relay-posts.")
 
     # Use os.environ.get() to obtain default values from environment variables for each option
@@ -453,5 +454,6 @@ def main(args: argparse.Namespace):
             )
 
 if __name__ == "__main__":
+    load_envs()
     args = parse_args()
     main(args)
