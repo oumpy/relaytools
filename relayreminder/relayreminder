@@ -132,15 +132,6 @@ class MattermostChannel:
         self.all_posts = aggregated_posts  # Update the all_posts property
         return aggregated_posts
 
-    # def fetch_posts(self) -> Dict:
-    #     posts = self.mm_driver.posts.get_posts_for_channel(self.channel_id, params={'since': int(self.after_time.timestamp() * 1000)})
-    #     self.all_posts = posts  # Update the all_posts property
-    #     if self.after_time <= BASE_TIME and posts['posts']:
-    #         self.after_time = datetime.fromtimestamp(
-    #             min(post['create_at'] for post in posts['posts'].values())/1000
-    #         )
-    #     return posts
-
     def fetch_last_post_datetimes(self, 
         user_ids: Optional[List[str]] = None,
         priority_filter: Optional[str] = None,
@@ -318,7 +309,6 @@ def load_tsv_data(file_path: str) -> Dict[int, str]:
                 continue
 
             data[week_number] = re.sub(r'\\n', '\n', parts[1])
-    print(data)
     return data
 
 def get_start_of_week_n_weeks_ago(n: int) -> datetime:
@@ -399,10 +389,6 @@ def main(args: argparse.Namespace):
 
     # Post messages
     for week, user_ids in sorted(users_to_notify.items(), key=lambda x: x[0]):
-        # Skip users with no posts unless specified
-        # if week == 0 and not args.all_users:
-        #     continue
-
         passed_weeks = current_week_number - week
         criteria = {
             "props": {
@@ -435,7 +421,6 @@ def main(args: argparse.Namespace):
             else:
                 root_id = None
 
-            # print(message)
             mm_channel.send_post(
                 message,
                 props={
@@ -450,35 +435,3 @@ def main(args: argparse.Namespace):
 if __name__ == "__main__":
     args = parse_arguments()
     main(args)
-
-if False:
-    parser = argparse.ArgumentParser(description="RelayReminder: the 3rd-generation bot-system for the relay-posts.")
-    parser.add_argument("--url", type=str, required=True, help="Mattermost URL")
-    parser.add_argument("--scheme", type=str, default="https", help="Mattermost URL Scheme")
-    parser.add_argument("--port", type=int, default=443, help="Mattermost Port")
-    parser.add_argument("--token", type=str, required=True, help="Access Token")
-    parser.add_argument("--team", type=str, required=True, help="Team name")
-    parser.add_argument("--channel", type=str, required=True, help="Channel name")
-
-    args = parser.parse_args()
-
-    mm_channel = MattermostChannel(
-        {
-            "url": args.url,
-            "scheme": args.scheme,
-            "port": args.port,
-            "token": args.token,
-        },
-        args.team, args.channel)
-
-    now = datetime.now()
-    start_time = now - timedelta(days=7)
-
-    user_ids = mm_channel.fetch_members()
-    print(f"All user IDs: {user_ids}")
-
-    all_posts = mm_channel.fetch_posts()
-    print(f"All posts since start time: {all_posts}")
-
-    last_post_dates = mm_channel.fetch_last_post_dates(user_ids)
-    print(f"Last post dates for each user: {last_post_dates}")
