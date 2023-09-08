@@ -533,7 +533,7 @@ def create_slashcommand_app(args):
         try:
             if len(slash_args) == 0:
                 min_weeks = args.blacklist_minweek_default
-                max_weeks = 2**30
+                max_weeks = float("inf")
             elif len(slash_args) == 1:
                 min_weeks = int(slash_args[0])
                 max_weeks = float("inf")
@@ -568,7 +568,7 @@ def create_slashcommand_app(args):
             after_time = BASE_TIME,
             stdout_mode = args.stdout_mode,
         )
-        last_post_datetimes = mm_channel.fetch_last_post_datetimes
+        last_post_datetimes = mm_channel.fetch_last_post_datetimes()
 
         # Convert dates to week numbers
         current_week_number = get_week_number(datetime.now())
