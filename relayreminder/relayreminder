@@ -373,7 +373,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--port", type=int, default=int(os.environ.get("RELAYREMINDER_PORT", 443)), help="Mattermost Port")
     parser.add_argument("--team", type=str, default=os.environ.get("RELAYREMINDER_TEAM", "main"), help="Team name")
     parser.add_argument("--channel", type=str, default=os.environ.get("RELAYREMINDER_CHANNEL", "RelayPosts"), help="Channel name")
-    parser.add_argument("--message-file", type=str, default=os.environ.get("RELAYREMINDER_MESSAGE_FILE", os.path.join(app_dir, "messages.tsv")), help="Path to the TSV file containing week intervals & reminder messages.")
+    parser.add_argument("--message-file", type=str, default=os.environ.get("RELAYREMINDER_MESSAGE_FILE", os.path.join(os.path.expanduser("~"), ".relayreminder", "messages.tsv")), help="Path to the TSV file containing week intervals & reminder messages.")
     parser.add_argument("--mention-format", type=str, default=os.environ.get("RELAYREMINDER_MENTION_FORMAT", "{}"), help="Path to the TSV file containing week intervals & reminder messages.")
     parser.add_argument("--stdout-mode", action="store_true", 
                         default=bool(strtobool(os.environ.get("RELAYREMINDER_STDOUT_MODE", "false"))),
@@ -385,10 +385,10 @@ def parse_args() -> argparse.Namespace:
     # slashcommand mode
     parser.add_argument("--slashcommand-mode", action="store_true",
                         default=bool(strtobool(os.environ.get("RELAYREMINDER_SLASHCOMMAND_MODE", "false"))),
-                        help="Work in slashcommand-mode.")    
+                        help="Work in slashcommand-mode.")
     parser.add_argument("--slashcommand-host", default=os.environ.get("RELAYREMINDER_SLASHCOMMAND_HOST", "0.0.0.0"), help="Slash-command listening host (default: %(default)s)")
     parser.add_argument("--slashcommand-port", type=int, default=os.environ.get("RELAYREMINDER_SLASHCOMMAND_PORT", 4500), help='Slash-command listening port')
-    parser.add_argument("--gunicorn-path", default=os.environ.get("RELAYREMINDER_GUNICORN_PATH"), help="Path to Gunicorn executable (if not provided, Flask built-in server will be used)")
+    parser.add_argument("--gunicorn-path", default=os.environ.get("RELAYREMINDER_GUNICORN_PATH", ""), help="Path to Gunicorn executable (if not provided, Flask built-in server will be used)")
     parser.add_argument("--workers", type=int, default=os.environ.get("RELAYREMINDER_WORKERS", 1), help="Number of Gunicorn worker processes (only applicable if using Gunicorn)")
     parser.add_argument("--timeout", type=int, default=os.environ.get("RELAYREMINDER_TIMEOUT", 30), help="Gunicorn timeout value in seconds (only applicable if using Gunicorn)")
     parser.add_argument("--blacklist-message-min", type=str, default=os.environ.get("RELAYREMINDER_BLACKLIST_MESSAGE", "No relay-posts >= {} weeks:"), help="Default leading message for /blacklist min")
