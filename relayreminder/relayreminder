@@ -395,8 +395,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--gunicorn-path", default=os.environ.get("RELAYREMINDER_GUNICORN_PATH", ""), help="Path to Gunicorn executable (if not provided, Flask built-in server will be used)")
     parser.add_argument("--workers", type=int, default=os.environ.get("RELAYREMINDER_WORKERS", 1), help="Number of Gunicorn worker processes (only applicable if using Gunicorn)")
     parser.add_argument("--timeout", type=int, default=os.environ.get("RELAYREMINDER_TIMEOUT", 30), help="Gunicorn timeout value in seconds (only applicable if using Gunicorn)")
-    parser.add_argument("--blacklist-message-min", type=str, default=os.environ.get("RELAYREMINDER_BLACKLIST_MESSAGE", "No relay-posts >= {} weeks:"), help="Default leading message for /blacklist min")
-    parser.add_argument("--blacklist-message-minmax", type=str, default=os.environ.get("RELAYREMINDER_BLACKLIST_MESSAGE", "No relay-posts for {}-{} weeks:"), help="Default leading message for /blacklist min max")
+    parser.add_argument("--blacklist-message-min", type=str, default=os.environ.get("RELAYREMINDER_BLACKLIST_MESSAGE_MIN", "No relay-posts >= {} weeks:"), help="Default leading message for /blacklist min")
+    parser.add_argument("--blacklist-message-minmax", type=str, default=os.environ.get("RELAYREMINDER_BLACKLIST_MESSAGE_MINMAX", "No relay-posts for {}-{} weeks:"), help="Default leading message for /blacklist min max")
     parser.add_argument("--blacklist-minweek-default", type=int, default=os.environ.get("RELAYREMINDER_BLACKLIST_MINWEEK_DEFAULT", 13), help="Default minweek for /blacklist")
 
     args = parser.parse_args()
@@ -587,10 +587,14 @@ def create_slashcommand_app(args):
             message = args.blacklist_message_minmax.format(min_weeks, max_weeks)
         message = (
             message + "\n"
-            + "\n".join([f"{mm_channel.get_dispname_by_id(userid)} ({weeks})"  for userid, weeks in passed_weeks_list])
+            + "\n".join([f"{mm_channel.get_dispname_by_id(userid)} [{mm_channel.get_username_by_id(userid)}] ({weeks})"  for userid, weeks in passed_weeks_list])
         )
-        print(mm_channel.dispnames)
-        return jsonify({"text": message})
+
+        return jsonify({
+            "response_type": "in_channel",
+            "text": message,
+            }
+        )
 
     return app
 
