@@ -314,7 +314,8 @@ def load_tsv_data(file_path: str) -> Dict[int, str]:
             if not parts[1]:
                 continue
 
-            data[week_number] = parts[1]
+            data[week_number] = re.sub(r'\\n', '\n', parts[1])
+    print(data)
     return data
 
 def get_start_of_week_n_weeks_ago(n: int) -> datetime:
