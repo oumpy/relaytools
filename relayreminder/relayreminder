@@ -13,9 +13,11 @@ from datetime import datetime, date, timedelta
 import argparse
 from typing import List, Dict, Optional, Union, Any
 import warnings
-from bisect import bisect_left, bisect_right
+from bisect import bisect_right
+import re
 
 APP_NAME = "RelayReminder"
+mention_format = "{} さん"
 
 BASE_TIME = datetime(1,1,3)
 BASE_DATE = BASE_TIME.date() # Monday
@@ -339,9 +341,9 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--token", type=str, required=True, help="Access Token")
     parser.add_argument("--team", type=str, required=True, help="Team name")
     parser.add_argument("--channel", type=str, required=True, help="Channel name")
-    parser.add_argument("--all-users", action="store_true", help="Notify all users including ones with no posts")
     parser.add_argument("--message-file", type=str, required=True, help="Path to the TSV file containing week intervals & reminder messages.")
     parser.add_argument("--stdout-mode", action="store_true", help="Post to stdout, instead of the Mattermost channel.")
+    parser.add_argument("--all-history", action="store_true", help="Search all history of the channel.")
     return parser.parse_args()
 
 def main(args: argparse.Namespace):
@@ -356,9 +358,16 @@ def main(args: argparse.Namespace):
     message_passed_weeks_list = sorted(message_data.keys())
     max_week_limit = message_passed_weeks_list[-1]
 
-    mm_channel = MattermostChannel(
-        driver_params, args.team, args.channel,
+    if args.all_history:
+        after_time = BASE_TIME
+    else:
         after_time = get_start_of_week_n_weeks_ago(max_week_limit),
+
+    mm_channel = MattermostChannel(
+        driver_params,
+        args.team,
+        args.channel,
+        after_time = after_time,
         stdout_mode = args.stdout_mode,
     )
     # Fetch all posts
@@ -369,7 +378,7 @@ def main(args: argparse.Namespace):
     # Convert dates to week numbers
     last_post_weeks = {user_id: get_week_number(date) for user_id, date in last_post_dates.items()}
     current_week_number = get_week_number(datetime.now())
-
+    
     # Find users and message based on last post week number
     users_to_notify = {}
     for user_id, week in last_post_weeks.items():
@@ -379,10 +388,10 @@ def main(args: argparse.Namespace):
     print(*sorted([(current_week_number - week, [mm_channel.get_username_by_id(userid) for userid in userids]) for week, userids in users_to_notify.items()]),sep='\n')
 
     # Post messages
-    for week, user_ids in sorted(users_to_notify.items(), key=lambda x: -x[0]):
+    for week, user_ids in sorted(users_to_notify.items(), key=lambda x: x[0]):
         # Skip users with no posts unless specified
-        if week == 0 and not args.all_users:
-            continue
+        # if week == 0 and not args.all_users:
+        #     continue
 
         passed_weeks = current_week_number - week
         criteria = {
@@ -400,12 +409,12 @@ def main(args: argparse.Namespace):
             continue
         passed_weeks_to_post = message_passed_weeks_list[passed_weeks_k-1]
 
-        if passed_weeks_to_post > last_passed_weeks:
+        if passed_weeks_to_post > last_passed_weeks or passed_weeks > max(max_week_limit, last_passed_weeks):
             message_start = message_data[passed_weeks_to_post].format(passed_weeks)
-            sorted_user_ids = sorted(user_ids, key=lambda uid: last_post_dates[uid])
-            mentions = '\n'.join([f'@{mm_channel.get_username_by_id(user_id)}' for user_id in sorted_user_ids])
+            sorted_user_ids = sorted(user_ids, key=lambda uid: (last_post_dates[uid], uid))
+            mentions = '\n'.join([mention_format.format(f'@{mm_channel.get_username_by_id(user_id)}') for user_id in sorted_user_ids])
 
-            message = f"{message_start}\n\n{mentions}"
+            message = f"{message_start}\n{mentions}"
 
             if matching_posts:
                 post = matching_posts[-1]
@@ -416,6 +425,7 @@ def main(args: argparse.Namespace):
             else:
                 root_id = None
 
+            # print(message)
             mm_channel.send_post(
                 message,
                 props={
