@@ -15,6 +15,7 @@ from typing import List, Dict, Optional, Union, Any
 import warnings
 from bisect import bisect_right
 import re
+import os
 
 APP_NAME = "RelayReminder"
 mention_format = "{} さん"
@@ -335,7 +336,7 @@ def parse_arguments() -> argparse.Namespace:
     Parse command line arguments and return the Namespace object.
     """
     parser = argparse.ArgumentParser(description="RelayReminder: the 3rd-generation bot-system for the relay-posts.")
-    parser.add_argument("--url", type=str, required=True, help="Mattermost URL")
+    parser.add_argument('--mm-url', default=os.environ.get('RELAYREMINDER_MM_URL', 'localhost'), help='Mattermost server URL')
     parser.add_argument("--scheme", type=str, default="https", help="Mattermost URL Scheme")
     parser.add_argument("--port", type=int, default=443, help="Mattermost Port")
     parser.add_argument("--token", type=str, required=True, help="Access Token")
@@ -348,7 +349,7 @@ def parse_arguments() -> argparse.Namespace:
 
 def main(args: argparse.Namespace):
     driver_params = {
-        "url": args.url,
+        "url": args.mm_url,
         "scheme": args.scheme,
         "port": args.port,
         "token": args.token
