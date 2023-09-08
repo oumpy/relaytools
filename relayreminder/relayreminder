@@ -134,16 +134,17 @@ class MattermostChannel:
     #         )
     #     return posts
 
-    def fetch_last_post_dates(self, 
-                              user_ids: Optional[List[str]] = None,
-                              priority_filter: Optional[str] = None,
-                              is_thread_head: Optional[bool] = None,
-                              ignore_deleted_posts: Optional[bool] = True) -> Dict[str, datetime]:
+    def fetch_last_post_datetimes(self, 
+        user_ids: Optional[List[str]] = None,
+        priority_filter: Optional[str] = None,
+        is_thread_head: Optional[bool] = None,
+        ignore_deleted_posts: Optional[bool] = True,
+    ) -> Dict[str, datetime]:
 
         if user_ids is None:
             user_ids = self.members
 
-        last_post_dates = dict.fromkeys(user_ids, BASE_TIME)
+        last_post_dates = dict.fromkeys(user_ids, self.after_time)
 
         if priority_filter:
             priority_filter = priority_filter.lower()
@@ -168,14 +169,15 @@ class MattermostChannel:
         if (priority_filter is None or priority_filter == 'standard') and \
            (is_thread_head is None or is_thread_head):
             for user_id, post_date in last_post_dates.items():
-                if post_date == BASE_TIME:
-                    join_date = self.fetch_join_date(user_id)
-                    if join_date:
-                        last_post_dates[user_id] = join_date
+                if post_date <= self.after_time:
+                    post_date = self.fetch_join_datetime(user_id)
+                if post_date <= self.after_time:
+                    post_date = self.fetch_last_post_datetime_from_record(user_id)
+                last_post_dates[user_id] = post_date
 
         return last_post_dates
 
-    def fetch_join_date(self, user_id: str) -> datetime:
+    def fetch_join_datetime(self, user_id: str) -> datetime:
         """Fetch the date when a user joined the channel using system messages."""
         criteria = [
             {
@@ -190,17 +192,31 @@ class MattermostChannel:
         filtered_posts = [
             self.filter_posts_by_criteria(criterion) for criterion in criteria
         ]
+
         join_time_milliseconds = max(
             (posts + [{"create_at": 0}])[0]["create_at"] for posts in filtered_posts
         )
-        if join_time_milliseconds == 0:
-            join_time = BASE_TIME
-        else:
+        if join_time_milliseconds > 0:
             join_time = datetime.fromtimestamp(join_time_milliseconds / 1000)
-
-        # print(self.get_username_by_id(user_id),":",join_time)
+        else:
+            join_time = self.after_time
 
         return join_time
+
+    def fetch_last_post_datetime_from_record(self, user_id: str) -> datetime:
+            posts = self.filter_posts_by_criteria(
+                {
+                    "bot_app": APP_NAME,
+                    "props": {
+                        "users": [user_id],
+                    },
+                },
+            )
+            if posts:
+                last_post_week = posts[-1]["props"]["last_post_week"]
+                return get_start_of_week(last_post_week)
+            else:
+                return self.after_time
 
     def send_post(self, message: str, props: Optional[Dict] = None, root_id: Optional[str] = None) -> Dict:
         payload = {
@@ -337,7 +353,7 @@ def main(args: argparse.Namespace):
     # Fetch all posts
     mm_channel.fetch_posts()
     # Fetch last post dates for all members
-    last_post_dates = mm_channel.fetch_last_post_dates(priority_filter="standard", is_thread_head=True)
+    last_post_dates = mm_channel.fetch_last_post_datetimes(priority_filter="standard", is_thread_head=True)
 
     # Convert dates to week numbers
     last_post_weeks = {user_id: get_week_number(date) for user_id, date in last_post_dates.items()}
