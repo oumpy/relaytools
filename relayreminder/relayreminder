@@ -323,6 +323,10 @@ def get_start_of_week_n_weeks_ago(n: int) -> datetime:
     target_date = start_of_this_week - timedelta(weeks=n)  # Get Monday n-weeks ago
     return datetime(target_date.year, target_date.month, target_date.day)
 
+def get_start_of_week(n: int) -> datetime:
+    target_time = BASE_TIME + timedelta(weeks=n)  # Get Monday of n-th week
+    return target_time
+
 def parse_arguments() -> argparse.Namespace:
     """
     Parse command line arguments and return the Namespace object.
