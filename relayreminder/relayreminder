@@ -110,10 +110,14 @@ class MattermostChannel:
         dispnames = {}
         for user_id in self.members:
             user = self.mm_driver.users.get_user(user_id)
-            if "nickname" in user:
+            # nicknameが存在していて、空でない場合
+            if user.get("nickname", "").strip():
                 dispnames[user_id] = user["nickname"]
             else:
-                dispnames[user_id] = user["last_name"] + " " + user["first_name"]
+                # last_name と first_name の組み合わせを使用
+                name_parts = [user.get("first_name", ""), user.get("last_name", "")]
+                full_name = " ".join(part for part in name_parts if part)
+                dispnames[user_id] = full_name if full_name.strip() else "Unknown"
 
         return dispnames
 
@@ -585,7 +589,7 @@ def create_slashcommand_app(args):
             message + "\n"
             + "\n".join([f"{mm_channel.get_dispname_by_id(userid)} ({weeks})"  for userid, weeks in passed_weeks_list])
         )
-
+        print(mm_channel.dispnames)
         return jsonify({"text": message})
 
     return app
