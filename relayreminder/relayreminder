@@ -349,7 +349,22 @@ def parse_arguments() -> argparse.Namespace:
                         default=bool(strtobool(os.environ.get("RELAYREMINDER_ALL_HISTORY", "false"))),
                         help="Search all history of the channel.")
 
-    return parser.parse_args()
+    args = parser.parse_args()
+
+    # Set environment variables based on the provided or defaulted args values
+    os.environ["RELAYREMINDER_BOT_TOKEN"] = args.bot_token
+    os.environ["RELAYREMINDER_APP_NAME"] = args.app_name
+    os.environ["RELAYREMINDER_MM_URL"] = args.mm_url
+    os.environ["RELAYREMINDER_SCHEME"] = args.scheme
+    os.environ["RELAYREMINDER_PORT"] = str(args.port)
+    os.environ["RELAYREMINDER_TEAM"] = args.team
+    os.environ["RELAYREMINDER_CHANNEL"] = args.channel
+    os.environ["RELAYREMINDER_MESSAGE_FILE"] = args.message_file
+    os.environ["RELAYREMINDER_MENTION_FORMAT"] = args.mention_format
+    os.environ["RELAYREMINDER_STDOUT_MODE"] = str(args.stdout_mode).lower()
+    os.environ["RELAYREMINDER_ALL_HISTORY"] = str(args.all_history).lower()
+
+    return args
 
 def main(args: argparse.Namespace):
     driver_params = {
