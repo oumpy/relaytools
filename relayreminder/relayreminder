@@ -86,10 +86,53 @@ class MattermostChannel:
         """
         return self.usernames.get(user_id, None)
 
-    def fetch_posts(self) -> Dict:
-        posts = self.mm_driver.posts.get_posts_for_channel(self.channel_id, params={'since': int(self.after_time.timestamp() * 1000)})
-        self.all_posts = posts  # Update the all_posts property
-        return posts
+    def fetch_posts(self, page_size=100) -> Dict:
+        """
+        Fetch all posts in the channel since 'after_time' using pagination.
+
+        Args:
+        - page_size (int): Number of posts to fetch in a single request. Default is 100.
+
+        Returns:
+        - Dict: Aggregated posts.
+        """
+        aggregated_posts = {'posts': {}, 'order': []}
+        page = 0
+
+        while True:
+            posts = self.mm_driver.posts.get_posts_for_channel(
+                self.channel_id,
+                params={
+                    'since': int(self.after_time.timestamp() * 1000),
+                    'per_page': page_size,
+                    'page': page
+                }
+            )
+
+            if not posts['posts']:
+                break  # No more posts to fetch
+
+            aggregated_posts['posts'].update(posts['posts'])
+            aggregated_posts['order'].extend(posts['order'])
+
+            page += 1  # Move to the next page
+
+        if self.after_time <= BASE_TIME and posts['posts']:
+            self.after_time = datetime.fromtimestamp(
+                aggregated_posts['posts'][aggregated_posts['order'][0]] / 1000
+            )
+
+        self.all_posts = aggregated_posts  # Update the all_posts property
+        return aggregated_posts
+
+    # def fetch_posts(self) -> Dict:
+    #     posts = self.mm_driver.posts.get_posts_for_channel(self.channel_id, params={'since': int(self.after_time.timestamp() * 1000)})
+    #     self.all_posts = posts  # Update the all_posts property
+    #     if self.after_time <= BASE_TIME and posts['posts']:
+    #         self.after_time = datetime.fromtimestamp(
+    #             min(post['create_at'] for post in posts['posts'].values())/1000
+    #         )
+    #     return posts
 
     def fetch_last_post_dates(self, 
                               user_ids: Optional[List[str]] = None,
