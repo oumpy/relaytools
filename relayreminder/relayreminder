@@ -16,8 +16,10 @@ import warnings
 from bisect import bisect_right
 import re
 import os
+import sys
 from distutils.util import strtobool
 from dotenv import load_dotenv
+import subprocess
 
 BASE_TIME = datetime(1,1,3)
 BASE_DATE = BASE_TIME.date() # Monday
@@ -350,6 +352,16 @@ def parse_args() -> argparse.Namespace:
                         default=bool(strtobool(os.environ.get("RELAYREMINDER_ALL_HISTORY", "false"))),
                         help="Search all history of the channel.")
 
+    # webhook mode
+    parser.add_argument("--webhook-mode", action="store_true",
+                        default=bool(strtobool(os.environ.get("RELAYREMINDER_WEBHOOK_MODE", "false"))),
+                        help="Work in Webhook-mode.")    
+    parser.add_argument("--webhook-host", default=os.environ.get("RELAYREMINDER_WEBHOOK_HOST", "0.0.0.0"), help="Webhook listening host (default: %(default)s)")
+    parser.add_argument("--webhook-port", type=int, default=os.environ.get("RELAYREMINDER_WEBHOOK_PORT", 4500), help='Webhook listening port')
+    parser.add_argument("--gunicorn-path", default=os.environ.get("RELAYREMINDER_GUNICORN_PATH"), help="Path to Gunicorn executable (if not provided, Flask built-in server will be used)")
+    parser.add_argument("--workers", type=int, default=os.environ.get("RELAYREMINDER_WORKERS", 1), help="Number of Gunicorn worker processes (only applicable if using Gunicorn)")
+    parser.add_argument("--timeout", type=int, default=os.environ.get("RELAYREMINDER_TIMEOUT", 30), help="Gunicorn timeout value in seconds (only applicable if using Gunicorn)")
+
     args = parser.parse_args()
 
     # Set environment variables based on the provided or defaulted args values
@@ -362,8 +374,16 @@ def parse_args() -> argparse.Namespace:
     os.environ["RELAYREMINDER_CHANNEL"] = args.channel
     os.environ["RELAYREMINDER_MESSAGE_FILE"] = args.message_file
     os.environ["RELAYREMINDER_MENTION_FORMAT"] = args.mention_format
-    os.environ["RELAYREMINDER_STDOUT_MODE"] = str(args.stdout_mode).lower()
-    os.environ["RELAYREMINDER_ALL_HISTORY"] = str(args.all_history).lower()
+    os.environ["RELAYREMINDER_STDOUT_MODE"] = str(args.stdout_mode)
+    os.environ["RELAYREMINDER_ALL_HISTORY"] = str(args.all_history)
+
+    # webhook mode
+    os.environ["RELAYREMINDER_WEBHOOK_MODE"] = str(args.webhook_mode)
+    os.environ["RELAYREMINDER_WEBHOOK_HOST"] = args.webhook_host
+    os.environ["RELAYREMINDER_WEBHOOK_PORT"] = str(args.webhook_port)
+    os.environ["RELAYREMINDER_GUNICORN_PATH"] = args.gunicorn_path
+    os.environ["RELAYREMINDER_WORKERS"] = str(args.workers)
+    os.environ["RELAYREMINDER_TIMEOUT"] = str(args.timeout)
 
     return args
 
@@ -456,4 +476,15 @@ def main(args: argparse.Namespace):
 if __name__ == "__main__":
     load_envs()
     args = parse_args()
-    main(args)
+    if args.webhook_mode:
+        if args.gunicorn_path:
+            subprocess.run([args.gunicorn_path, "--workers", str(args.workers), "--timeout", str(args.timeout), "--bind", f"{args.webhook_host}:{args.webhook_port}", "relayreminder:app"])
+        else:
+            app = create_app(args)
+            app.run(host=args.webhook_host, port=args.webhook_port)
+    else:
+        main(args)
+elif __name__ == "relayreminder" and bool(strtobool(os.environ["RELAYREMINDER_WEBHOOK_MODE"])):
+    sys.argv = sys.argv[:1]
+    args = parse_args()
+    app = create_app(args)
