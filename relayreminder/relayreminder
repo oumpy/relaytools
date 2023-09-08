@@ -385,7 +385,7 @@ def main(args: argparse.Namespace):
         if week not in users_to_notify:
             users_to_notify[week] = []
         users_to_notify[week].append(user_id)
-    print(*sorted([(current_week_number - week, [mm_channel.get_username_by_id(userid) for userid in userids]) for week, userids in users_to_notify.items()]),sep='\n')
+    # print(*sorted([(current_week_number - week, [mm_channel.get_username_by_id(userid) for userid in userids]) for week, userids in users_to_notify.items()]),sep='\n')
 
     # Post messages
     for week, user_ids in sorted(users_to_notify.items(), key=lambda x: x[0]):
