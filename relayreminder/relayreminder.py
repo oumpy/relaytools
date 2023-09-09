@@ -576,10 +576,10 @@ def create_slashcommand_app(args):
 
         # Convert dates to week numbers
         current_week_number = get_week_number(datetime.now())
-        passed_weeks_list = sorted([(user_id, current_week_number - get_week_number(date)) 
-                                    for user_id, date in last_post_datetimes.items()
-                                    if min_weeks <= current_week_number - get_week_number(date) <= max_weeks],
-                                    key=lambda x: x[1])
+        passed_weeks_list = sorted([(user_id, post_time) 
+                                    for user_id, post_time in last_post_datetimes.items()
+                                    if min_weeks <= current_week_number - get_week_number(post_time) <= max_weeks],
+                                    key=lambda x: x[1], reverse=True)
 
         if max_weeks == float("inf"):
             message = args.blacklist_message_min.format(min_weeks)
@@ -587,7 +587,7 @@ def create_slashcommand_app(args):
             message = args.blacklist_message_minmax.format(min_weeks, max_weeks)
         message = (
             message + "\n"
-            + "\n".join([f"{mm_channel.get_dispname_by_id(userid)} [{mm_channel.get_username_by_id(userid)}] ({weeks})"  for userid, weeks in passed_weeks_list])
+            + "\n".join([f"{mm_channel.get_dispname_by_id(userid)} [{mm_channel.get_username_by_id(userid)}] ({current_week_number - get_week_number(post_time)})"  for userid, post_time in passed_weeks_list])
         )
 
         return jsonify({
