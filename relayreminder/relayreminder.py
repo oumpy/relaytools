@@ -402,6 +402,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--blacklist-minweek-default", type=int, default=os.environ.get("RELAYREMINDER_BLACKLIST_MINWEEK_DEFAULT", 13), help="Default minweek for /blacklist")
     parser.add_argument("--datetime-format", type=str, default=os.environ.get("RELAYREMINDER_DATETIME_FORMAT", "%Y-%m-%d %H:%M:%S"), help="Display format for datetime.")
     parser.add_argument("--whenmylast-message-format", type=str, default=os.environ.get("RELAYREMINDER_WHENMYLAST_MESSAGE_FORMAT", "{}\\n{}"), help="message format for /whenmylast")
+    parser.add_argument("--whenmylast-datetime-never", type=str, default=os.environ.get("RELAYREMINDER_WHENMYLAST_DATETIME_NEVER", "Never"), help="Sign for no message in /whenmylast")
 
     args = parser.parse_args()
 
@@ -430,6 +431,7 @@ def parse_args() -> argparse.Namespace:
     os.environ["RELAYREMINDER_BLACKLIST_MINWEEK_DEFAULT"] = str(args.blacklist_minweek_default)
     os.environ["RELAYREMINDER_DATETIME_FORMAT"] = str(args.datetime_format)
     os.environ["RELAYREMINDER_WHENMYLAST_MESSAGE_FORMAT"] = str(args.whenmylast_message_format)
+    os.environ["RELAYREMINDER_WHENMYLAST_DATETIME_NEVER"] = str(args.whenmylast_datetime_never)
 
     return args
 
@@ -627,9 +629,16 @@ def create_slashcommand_app(args):
         last_post_datetime_all = mm_channel.fetch_last_post_datetimes(user_ids=[user_id], app_name=args.app_name)[user_id]
         last_post_datetime_standard_channel = mm_channel.fetch_last_post_datetimes(user_ids=[user_id], priority_filter="standard", is_thread_head=True, app_name=args.app_name)[user_id]
 
-        # Convert dates to week numbers
-        last_post_datetime_all_str = last_post_datetime_all.strftime(args.datetime_format)
-        last_post_datetime_standard_channel_str = last_post_datetime_standard_channel.strftime(args.datetime_format)
+        if last_post_datetime_standard_channel == BASE_TIME:
+            last_post_datetime_standard_channel_str = args.whenmylast_datetime_never
+        else:
+            last_post_datetime_standard_channel_str = last_post_datetime_standard_channel.strftime(args.datetime_format)
+
+        if last_post_datetime_all == BASE_TIME:
+            last_post_datetime_all_str = args.whenmylast_datetime_never
+        else:
+            last_post_datetime_all_str = last_post_datetime_all.strftime(args.datetime_format)
+
         message = args.whenmylast_message_format.replace("\\n", "\n").format(last_post_datetime_standard_channel_str, last_post_datetime_all_str)
 
         return jsonify(
