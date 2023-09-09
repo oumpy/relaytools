@@ -177,6 +177,8 @@ class MattermostChannel:
         is_thread_head: Optional[bool] = None,
         ignore_deleted_posts: Optional[bool] = True,
         app_name: Optional[str] = None,
+        regard_join_as_post: bool = False,
+        use_past_record: bool = False,
     ) -> Dict[str, datetime]:
 
         if user_ids is None:
@@ -207,9 +209,9 @@ class MattermostChannel:
         if (priority_filter is None or priority_filter == 'standard') and \
            (is_thread_head is None or is_thread_head):
             for user_id, post_date in last_post_dates.items():
-                if post_date <= self.after_time:
+                if regard_join_as_post and post_date <= self.after_time:
                     post_date = self.fetch_join_datetime(user_id)
-                if post_date <= self.after_time:
+                if use_past_record and post_date <= self.after_time:
                     post_date = self.fetch_last_post_datetime_from_record(user_id, app_name)
                 last_post_dates[user_id] = post_date
 
@@ -460,7 +462,13 @@ def main(args: argparse.Namespace):
         stdout_mode = args.stdout_mode,
     )
     # Fetch last post dates for all members
-    last_post_dates = mm_channel.fetch_last_post_datetimes(priority_filter="standard", is_thread_head=True, app_name=args.app_name)
+    last_post_dates = mm_channel.fetch_last_post_datetimes(
+        priority_filter="standard",
+        is_thread_head=True,
+        app_name=args.app_name,
+        regard_join_as_post = True,
+        use_past_record = True,
+    )
 
     # Convert dates to week numbers
     last_post_weeks = {user_id: get_week_number(date) for user_id, date in last_post_dates.items()}
@@ -576,7 +584,13 @@ def create_slashcommand_app(args):
             after_time = BASE_TIME,
             stdout_mode = args.stdout_mode,
         )
-        last_post_datetimes = mm_channel.fetch_last_post_datetimes(priority_filter="standard", is_thread_head=True, app_name=args.app_name)
+        last_post_datetimes = mm_channel.fetch_last_post_datetimes(
+            priority_filter="standard",
+            is_thread_head=True,
+            app_name=args.app_name,
+            regard_join_as_post = True,
+            use_past_record = True,
+        )
 
         # Convert dates to week numbers
         current_week_number = get_week_number(datetime.now())
