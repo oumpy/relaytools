@@ -572,7 +572,7 @@ def create_slashcommand_app(args):
             after_time = BASE_TIME,
             stdout_mode = args.stdout_mode,
         )
-        last_post_datetimes = mm_channel.fetch_last_post_datetimes()
+        last_post_datetimes = mm_channel.fetch_last_post_datetimes(priority_filter="standard", is_thread_head=True, app_name=args.app_name)
 
         # Convert dates to week numbers
         current_week_number = get_week_number(datetime.now())
