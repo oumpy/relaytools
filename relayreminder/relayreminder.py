@@ -114,11 +114,9 @@ class MattermostChannel:
         dispnames = {}
         for user_id in self.members:
             user = self.mm_driver.users.get_user(user_id)
-            # nicknameが存在していて、空でない場合
             if user.get("nickname", "").strip():
                 dispnames[user_id] = user["nickname"]
             else:
-                # last_name と first_name の組み合わせを使用
                 name_parts = [user.get("first_name", ""), user.get("last_name", "")]
                 full_name = " ".join(part for part in name_parts if part)
                 dispnames[user_id] = full_name if full_name.strip() else "Unknown"
@@ -195,7 +193,7 @@ class MattermostChannel:
             root_id = post.get('root_id', '')
             priority = post['metadata'].get('priority', {}).get('priority', 'standard').lower()
 
-            # Skip deleted post (optional)
+            # Skip deleted post (default)
             if ignore_deleted_posts and post['delete_at'] != 0:
                 continue
 
@@ -459,8 +457,6 @@ def main(args: argparse.Namespace):
         after_time = after_time,
         stdout_mode = args.stdout_mode,
     )
-    # Fetch all posts
-    # mm_channel.fetch_posts()
     # Fetch last post dates for all members
     last_post_dates = mm_channel.fetch_last_post_datetimes(priority_filter="standard", is_thread_head=True, app_name=args.app_name)
 
@@ -474,7 +470,6 @@ def main(args: argparse.Namespace):
         if week not in users_to_notify:
             users_to_notify[week] = []
         users_to_notify[week].append(user_id)
-    # print(*sorted([(current_week_number - week, [mm_channel.get_username_by_id(userid) for userid in userids]) for week, userids in users_to_notify.items()]),sep='\n')
 
     # Post messages
     for week, user_ids in sorted(users_to_notify.items(), key=lambda x: x[0]):
@@ -561,7 +556,6 @@ def create_slashcommand_app(args):
                         {
                             "title": "Usage",
                             "text": "/blacklist min_weeks [max_weeks]",
-                            # "color": "#FF0000",
                         },
                     ],
                 },
