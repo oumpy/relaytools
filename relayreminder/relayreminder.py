@@ -51,16 +51,20 @@ Anything = object()
 class MattermostChannel:
     def __init__(self,
         driver_params: Dict,
-        team_name: str,
-        channel_name: str,
+        team_name: str = "main",
+        channel_name: str = "",
+        channel_id: Optional[str] = None,
         after_time: Optional[datetime] = None,
         stdout_mode: bool = False,
     ):
         self.mm_driver = Driver(driver_params)
         self.mm_driver.login()
-        self.team_name = team_name
-        self.channel_name = channel_name
-        self.channel_id = self._get_channel_id()
+        if channel_id:
+            self.channel_id = channel_id
+        else:
+            self.team_name = team_name
+            self.channel_name = channel_name
+            self.channel_id = self._get_channel_id()
         self.members = self.fetch_members()
         self.usernames = self.fetch_usernames()
         self.dispnames = self.fetch_dispnames()
@@ -398,6 +402,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--blacklist-message-min", type=str, default=os.environ.get("RELAYREMINDER_BLACKLIST_MESSAGE_MIN", "No relay-posts >= {} weeks:"), help="Default leading message for /blacklist min")
     parser.add_argument("--blacklist-message-minmax", type=str, default=os.environ.get("RELAYREMINDER_BLACKLIST_MESSAGE_MINMAX", "No relay-posts for {}-{} weeks:"), help="Default leading message for /blacklist min max")
     parser.add_argument("--blacklist-minweek-default", type=int, default=os.environ.get("RELAYREMINDER_BLACKLIST_MINWEEK_DEFAULT", 13), help="Default minweek for /blacklist")
+    parser.add_argument("--datetime-format", type=str, default=os.environ.get("RELAYREMINDER_DATETIME_FORMAT", "%Y-%m-%d %H:%M:%S"), help="Display format for datetime.")
+    parser.add_argument("--whenmylast-message-format", type=str, default=os.environ.get("RELAYREMINDER_WHENMYLAST_MESSAGE_FORMAT", "{}\\n{}"), help="message format for /whenmylast")
 
     args = parser.parse_args()
 
@@ -424,6 +430,8 @@ def parse_args() -> argparse.Namespace:
     os.environ["RELAYREMINDER_BLACKLIST_MESSAGE_MIN"] = args.blacklist_message_min
     os.environ["RELAYREMINDER_BLACKLIST_MESSAGE_MINMAX"] = args.blacklist_message_minmax
     os.environ["RELAYREMINDER_BLACKLIST_MINWEEK_DEFAULT"] = str(args.blacklist_minweek_default)
+    os.environ["RELAYREMINDER_DATETIME_FORMAT"] = str(args.datetime_format)
+    os.environ["RELAYREMINDER_WHENMYLAST_MESSAGE_FORMAT"] = str(args.whenmylast_message_format)
 
     return args
 
@@ -594,6 +602,47 @@ def create_slashcommand_app(args):
             "response_type": "in_channel",
             "text": message,
             }
+        )
+
+    @app.route('/whenmylast', methods=['POST'])
+    def whenmylast():
+        """Handle incoming /blacklist events from Mattermost."""
+        # logging.debug(f"Slash-command received: {request.json}")
+
+        args = g.args
+        data = request.form
+        token = data.get("token")
+
+        # Verify the slash-command token
+        if token != os.environ["MATTERMOST_WHENMYLAST_TOKEN"]:
+            return jsonify({"text": "Invalid token"}), 403
+
+        driver_params = {
+            "url": args.mm_url,
+            "scheme": args.scheme,
+            "port": args.port,
+            "token": args.bot_token
+        }
+        mm_channel = MattermostChannel(
+            driver_params,
+            channel_id = data.get("channel_id"),
+            after_time = BASE_TIME,
+            stdout_mode = args.stdout_mode,
+        )
+        user_id = data.get("user_id")
+        last_post_datetime_all = mm_channel.fetch_last_post_datetimes(user_ids=[user_id], app_name=args.app_name)[user_id]
+        last_post_datetime_standard_channel = mm_channel.fetch_last_post_datetimes(user_ids=[user_id], priority_filter="standard", is_thread_head=True, app_name=args.app_name)[user_id]
+
+        # Convert dates to week numbers
+        last_post_datetime_all_str = last_post_datetime_all.strftime(args.datetime_format)
+        last_post_datetime_standard_channel_str = last_post_datetime_standard_channel.strftime(args.datetime_format)
+        message = args.whenmylast_message_format.replace("\\n", "\n").format(last_post_datetime_standard_channel_str, last_post_datetime_all_str)
+
+        return jsonify(
+            {
+                "response_type": "ephemeral",
+                "text": message,
+            },
         )
 
     return app
