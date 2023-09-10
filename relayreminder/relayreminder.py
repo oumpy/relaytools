@@ -246,6 +246,8 @@ class MattermostChannel:
     def fetch_last_post_datetime_from_record(self, user_id: str, app_name: Optional[str] = None) -> datetime:
         criteria = {
             "props": {
+                "bot_app": args.app_name,
+                "type": "record",
                 "users": [user_id],
             },
         }
@@ -374,6 +376,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="RelayReminder: the 3rd-generation bot-system for the relay-posts.")
 
     # Use os.environ.get() to obtain default values from environment variables for each option
+    parser.add_argument("--initialize", action="store_true", help="Post an administration message as preparation.")
     parser.add_argument("--bot-token", type=str, default=os.environ.get("RELAYREMINDER_BOT_TOKEN"), help="Access Token")
     parser.add_argument("--app-name", default=os.environ.get("RELAYREMINDER_APP_NAME", "RelayReminder"), help='Application name')
     parser.add_argument("--mm-url", default=os.environ.get("RELAYREMINDER_MM_URL", "localhost"), help='Mattermost server URL')
@@ -461,6 +464,18 @@ def main(args: argparse.Namespace):
         after_time = after_time,
         stdout_mode = args.stdout_mode,
     )
+
+    if args.initialize:
+        mm_channel.send_post(
+            "Administration thread.",
+            props={
+                "bot_app": args.app_name,
+                "type": "relaystop",
+                "data": dict(),
+            },
+        )
+        return
+
     # Fetch last post dates for all members
     last_post_dates = mm_channel.fetch_last_post_datetimes(
         priority_filter="standard",
@@ -487,6 +502,7 @@ def main(args: argparse.Namespace):
         criteria = {
             "props": {
                 "bot_app": args.app_name,
+                "type": "record",
                 "last_post_week": week,
             }
         }
@@ -519,6 +535,7 @@ def main(args: argparse.Namespace):
                 message,
                 props={
                     "bot_app": args.app_name,
+                    "type": "record",
                     "last_post_week": week,
                     "passed_weeks": passed_weeks,
                     "users": sorted_user_ids,
