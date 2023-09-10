@@ -21,6 +21,7 @@ from distutils.util import strtobool
 from dotenv import load_dotenv
 import subprocess
 from flask import Flask, request, jsonify, g
+from dateutil import parser
 
 BASE_TIME = datetime(1,1,3)
 BASE_DATE = BASE_TIME.date() # Monday
@@ -65,35 +66,46 @@ class MattermostChannel:
             self.team_name = team_name
             self.channel_name = channel_name
             self.channel_id = self._get_channel_id()
-        self.members = self.fetch_members()
-        self.usernames = self.fetch_usernames()
+        self.users, self.id2user = self.fetch_users()
+        self.user_ids = self.fetch_user_ids()
+        self.id2name, self.name2id = self.fetch_usernames_and_ids()
         self.dispnames = self.fetch_dispnames()
         self.all_posts = {'order': [], 'posts': {}}
         self.after_time = after_time
         if after_time is not None:
             self.fetch_posts()
+        self.stop_data = self.fetch_stop_data()
         self.stdout_mode = stdout_mode
 
     def _get_channel_id(self) -> str:
         channel = self.mm_driver.channels.get_channel_by_name_and_team_name(self.team_name, self.channel_name)
         return channel['id']
 
-    def fetch_members(self) -> List[str]:
-        members = self.mm_driver.channels.get_channel_members(self.channel_id)
-        return [member['user_id'] for member in members]
+    def fetch_users(self) -> Dict:
+        users = self.mm_driver.channels.get_channel_members(self.channel_id)
+        id2user = {}
+        for user in users:
+            id2user[user["user_id"]] = user
+        return users, id2user
 
-    def fetch_usernames(self) -> Dict[str, str]:
+    def fetch_user_ids(self) -> List[str]:
+        return [user["user_id"] for user in self.users]
+
+    def fetch_usernames_and_ids(self) -> Dict[str, str]:
         """
-        Fetch usernames based on member user_ids.
+        Fetch usernames based on user_ids.
         
         Returns:
             A dictionary where keys are user_ids and values are corresponding usernames.
         """
-        usernames = {}
-        for user_id in self.members:
+        id2name = {}
+        name2id = {}
+        for user_id in self.user_ids:
             user = self.mm_driver.users.get_user(user_id)
-            usernames[user_id] = user['username']
-        return usernames
+            username = user['username']
+            id2name[user_id] = username
+            name2id[username] = user_id
+        return id2name, name2id
 
     def get_username_by_id(self, user_id: str) -> Optional[str]:
         """
@@ -102,22 +114,41 @@ class MattermostChannel:
         Returns:
             Username corresponding to the user_id or None if not found.
         """
-        return self.usernames.get(user_id, None)
+        return self.id2name.get(user_id, None)
+
+    def get_user_by_id(self, user_id: str) -> Optional[str]:
+        """
+        Get the user-data for a given user_id using the self.usernames dictionary.
+        
+        Returns:
+            Username corresponding to the user_id or None if not found.
+        """
+        return self.id2user.get(user_id, None)
+
+    def get_id_by_username(self, username: str) -> Optional[str]:
+        """
+        Get the username for a given user_id using the self.usernames dictionary.
+        
+        Returns:
+            Username corresponding to the user_id or None if not found.
+        """
+        return self.name2id.get(username, None)
 
     def fetch_dispnames(self) -> Dict[str, str]:
         """
-        Fetch display-names based on member user_ids.
+        Fetch display-names based on user_id user_ids.
         
         Returns:
             A dictionary where keys are user_ids and values are corresponding display-names.
         """
         dispnames = {}
-        for user_id in self.members:
-            user = self.mm_driver.users.get_user(user_id)
-            if user.get("nickname", "").strip():
-                dispnames[user_id] = user["nickname"]
+        for user in self.users:
+            user_id = user["user_id"]
+            user_data = self.mm_driver.users.get_user(user_id)
+            if user_data.get("nickname", "").strip():
+                dispnames[user_id] = user_data["nickname"]
             else:
-                name_parts = [user.get("first_name", ""), user.get("last_name", "")]
+                name_parts = [user_data.get("first_name", ""), user_data.get("last_name", "")]
                 full_name = " ".join(part for part in name_parts if part)
                 dispnames[user_id] = full_name if full_name.strip() else "Unknown"
 
@@ -179,10 +210,11 @@ class MattermostChannel:
         app_name: Optional[str] = None,
         regard_join_as_post: bool = False,
         use_past_record: bool = False,
+        use_admin_stop: bool = False,
     ) -> Dict[str, datetime]:
 
         if user_ids is None:
-            user_ids = self.members
+            user_ids = self.user_ids
 
         last_post_dates = dict.fromkeys(user_ids, self.after_time)
 
@@ -213,6 +245,10 @@ class MattermostChannel:
                     post_date = self.fetch_join_datetime(user_id)
                 if use_past_record and post_date <= self.after_time:
                     post_date = self.fetch_last_post_datetime_from_record(user_id, app_name)
+                if use_admin_stop:
+                    stop_date = self.fetch_stop_until(user_id, app_name)
+                    if stop_date > post_date:
+                        post_date = stop_date
                 last_post_dates[user_id] = post_date
 
         return last_post_dates
@@ -246,13 +282,12 @@ class MattermostChannel:
     def fetch_last_post_datetime_from_record(self, user_id: str, app_name: Optional[str] = None) -> datetime:
         criteria = {
             "props": {
-                "bot_app": args.app_name,
                 "type": "record",
                 "users": [user_id],
             },
         }
         if app_name:
-            criteria["bot_app"] = app_name
+            criteria["props"]["bot_app"] = app_name
 
         posts = self.filter_posts_by_criteria(criteria)
         if posts:
@@ -260,6 +295,29 @@ class MattermostChannel:
             return get_start_of_week(last_post_week)
         else:
             return self.after_time
+
+    def fetch_stop_data(self, app_name: Optional[str] = None) -> datetime:
+        criteria = {
+            "props": {
+                "type": "relaystop",
+                "data": Anything
+            },
+        }
+        if app_name:
+            criteria["props"]["bot_app"] = app_name
+
+        posts = self.filter_posts_by_criteria(criteria)
+        if posts:
+            last_stop_data = posts[-1]["props"]["data"]
+            return last_stop_data
+        else:
+            return dict()
+
+    def fetch_stop_until(self, user_id: str, app_name: Optional[str] = None) -> datetime:
+        if user_id in self.stop_data:
+            until_date = parser.parse(self.stop_data[user_id])
+            return datetime(until_date.year, until_date.month, until_date.day)
+        return self.after_time
 
     def send_post(self, message: str, props: Optional[Dict] = None, root_id: Optional[str] = None) -> Dict:
         payload = {
@@ -476,13 +534,14 @@ def main(args: argparse.Namespace):
         )
         return
 
-    # Fetch last post dates for all members
+    # Fetch last post dates for all user_ids
     last_post_dates = mm_channel.fetch_last_post_datetimes(
         priority_filter="standard",
         is_thread_head=True,
         app_name=args.app_name,
         regard_join_as_post = True,
         use_past_record = True,
+        use_admin_stop = True,
     )
 
     # Convert dates to week numbers
@@ -542,6 +601,16 @@ def main(args: argparse.Namespace):
                 },
                 root_id=root_id,
             )
+
+
+relayadmin_help_message = """\
+<Usage of /relayadmin>
+/relayadmin help : Display this message only for you.
+/relayadmin status: Display the stopped user status only for you.
+/relayadmin stop *username* *date* : Stop relay-posts for the user until *date*.
+/relayadmin cancelstop *username*: Cancel the stopping config for the user.
+/relayadmin restart *username*: Restart relay-posts for the user, regarding they posted today.
+"""
 
 def create_slashcommand_app(args):
     app = Flask(__name__)
@@ -607,6 +676,7 @@ def create_slashcommand_app(args):
             app_name=args.app_name,
             regard_join_as_post = True,
             use_past_record = True,
+            use_admin_stop = True,
         )
 
         # Convert dates to week numbers
@@ -622,7 +692,7 @@ def create_slashcommand_app(args):
             message = args.blacklist_message_minmax.format(min_weeks, max_weeks)
         message = (
             message + "\n"
-            + "\n".join([f"{mm_channel.get_dispname_by_id(userid)} [{mm_channel.get_username_by_id(userid)}] ({current_week_number - get_week_number(post_time)})"  for userid, post_time in passed_weeks_list])
+            + "\n".join([f"{mm_channel.get_dispname_by_id(user_id)} [{mm_channel.get_username_by_id(user_id)}] ({current_week_number - get_week_number(post_time)})"  for user_id, post_time in passed_weeks_list])
         )
 
         return jsonify({
@@ -633,7 +703,7 @@ def create_slashcommand_app(args):
 
     @app.route('/whenmylast', methods=['POST'])
     def whenmylast():
-        """Handle incoming /blacklist events from Mattermost."""
+        """Handle incoming /whenmylast events from Mattermost."""
         # logging.debug(f"Slash-command received: {request.json}")
 
         args = g.args
@@ -678,6 +748,106 @@ def create_slashcommand_app(args):
                 "text": message,
             },
         )
+
+    @app.route('/relayadmin', methods=['POST'])
+    def relayadmin():
+        """Handle incoming /relayadmin events from Mattermost."""
+        # logging.debug(f"Slash-command received: {request.json}")
+
+        args = g.args
+        data = request.form
+        token = data.get("token")
+        slash_args = data.get("text").split()
+
+        # Verify the slash-command token
+        if token != os.environ["MATTERMOST_RELAYADMIN_TOKEN"]:
+            return jsonify({"text": "Invalid token"}), 401
+
+        driver_params = {
+            "url": args.mm_url,
+            "scheme": args.scheme,
+            "port": args.port,
+            "token": args.bot_token
+        }
+        mm_channel = MattermostChannel(
+            driver_params,
+            team_name = args.team,
+            channel_name = args.channel,
+            after_time = BASE_TIME,
+            stdout_mode = args.stdout_mode,
+        )
+        exec_user_id = data.get("user_id")
+        # channel_id = mm_channel.channel_id
+        # exec_channel_id = data.get("channel_id")
+
+        roles = mm_channel.mm_driver.users.get_user(exec_user_id)["roles"].split()
+        if "system_admin" not in roles:
+            return jsonify({"response_type": "ephemeral", "text": "You don't have correct permission to execute this command."}), 403
+
+        if len(slash_args) == 0 or slash_args[0].lower() == "help":
+            return jsonify({"response_type": "ephemeral", "text": relayadmin_help_message})
+        sub_command = slash_args[0].lower()
+        sub_args = slash_args[1:]
+        
+        try:
+            stop_records = mm_channel.filter_posts_by_criteria(
+                {
+                    "props": {
+                        "bot_app": args.app_name,
+                        "type": "relaystop",
+                        "data": Anything,
+                    },
+                },
+            )
+            last_record = stop_records[-1]
+            stop_data = last_record["props"]["data"]
+
+            if sub_command in {"stop", "cancelstop", "restart"}:
+                username = sub_args[0]
+                user_id = mm_channel.get_id_by_username(username)
+                if user_id is None:
+                    return jsonify({"response_type": "ephemeral", "text": f"{username} is not a member of relay-channel."}), 400
+                if sub_command == "stop":
+                    until_date = parser.parse(sub_args[1]).date()
+                    stop_data[user_id] = until_date.strftime("%Y-%m-%d")
+                    sub_args = sub_args[:2]
+                elif sub_command == "cancelstop":
+                    del stop_data[user_id]
+                    sub_args = sub_args[:1]
+                else: # "restart"
+                    until_date = datetime.now().date()
+                    stop_data[user_id] = until_date.strftime("%Y-%m-%d")
+                    sub_args = sub_args[:1]
+                
+                root_id = last_record["root_id"]
+                if root_id == "":
+                    root_id = last_record["id"]
+                mm_channel.send_post(
+                    "/relayadmin {} {}".format(sub_command, " ".join(sub_args)),
+                    props = {
+                        "bot_app": args.app_name,
+                        "type": "relaystop",
+                        "data": stop_data,
+                    },
+                    root_id = root_id,
+                )
+                return jsonify({}), 200
+            elif sub_command == "status":
+                return jsonify(
+                    {
+                        "response_type": "ephemeral",
+                        "text": "Relay-posts now stop for:\n{}".format(
+                            "\n".join(
+                                [f"{mm_channel.get_dispname_by_id(user_id)} [{mm_channel.get_username_by_id(user_id)}]: until {until_date}" for user_id, until_date in sorted(stop_data.items(), key=lambda x: (x[1],x[0]))]
+                            )
+                        )
+                    },
+                ), 200
+            else:
+                return jsonify({"response_type": "ephemeral", "text": relayadmin_help_message})
+
+        except:
+            return jsonify({"response_type": "ephemeral", "text": "Error:\n" + relayadmin_help_message})
 
     return app
 
