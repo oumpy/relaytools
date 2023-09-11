@@ -840,7 +840,7 @@ def create_slashcommand_app(args):
                 root_id = last_record["root_id"]
                 if root_id == "":
                     root_id = last_record["id"]
-                mm_channel.send_post(
+                post_result = mm_channel.send_post(
                     "/relayadmin {} {}".format(sub_command, " ".join(sub_args)),
                     props = {
                         "bot_app": args.app_name,
@@ -849,7 +849,28 @@ def create_slashcommand_app(args):
                     },
                     root_id = root_id,
                 )
-                return jsonify({}), 200
+                if post_result:
+                    return jsonify(
+                        {
+                            "response_type": "ephemeral",
+                            "text": "Your command has been successfully executed:\n{}".format(
+                                "\n".join(
+                                    [f"{mm_channel.get_dispname_by_id(user_id)} [{mm_channel.get_username_by_id(user_id)}]: until {until_date}" for user_id, until_date in sorted(stop_data.items(), key=lambda x: (x[1],x[0]))]
+                                )
+                            )
+                        },
+                    )
+                else:
+                    return jsonify(
+                        {
+                            "response_type": "ephemeral",
+                            "text": "Something went wrong when posting your command:\n{}".format(
+                                "\n".join(
+                                    [f"{mm_channel.get_dispname_by_id(user_id)} [{mm_channel.get_username_by_id(user_id)}]: until {until_date}" for user_id, until_date in sorted(stop_data.items(), key=lambda x: (x[1],x[0]))]
+                                )
+                            )
+                        }
+                    )
             elif sub_command == "status":
                 return jsonify(
                     {
@@ -860,12 +881,12 @@ def create_slashcommand_app(args):
                             )
                         )
                     },
-                ), 200
+                )
             else:
                 return jsonify({"response_type": "ephemeral", "text": relayadmin_help_message})
 
         except:
-            return jsonify({"response_type": "ephemeral", "text": "Error:\n" + relayadmin_help_message})
+            return jsonify({"response_type": "ephemeral", "text": relayadmin_help_message})
 
     return app
 
