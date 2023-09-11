@@ -313,7 +313,7 @@ class MattermostChannel:
         else:
             return dict()
 
-    def fetch_stop_until(self, user_id: str, app_name: Optional[str] = None) -> datetime:
+    def fetch_stop_until(self, user_id: str) -> datetime:
         if user_id in self.stop_data:
             until_date = parser.parse(self.stop_data[user_id])
             return datetime(until_date.year, until_date.month, until_date.day)
