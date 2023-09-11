@@ -66,10 +66,12 @@ class MattermostChannel:
             self.team_name = team_name
             self.channel_name = channel_name
             self.channel_id = self._get_channel_id()
-        self.users, self.id2user = self.fetch_users()
-        self.user_ids = self.fetch_user_ids()
-        self.id2name, self.name2id = self.fetch_usernames_and_ids()
-        self.dispnames = self.fetch_dispnames()
+        self.user_ids = self._fetch_user_ids()
+        self.users = self._fetch_users()
+        self.id2name, self.name2id = self._fetch_usernames_and_ids()
+        self.id2dispname = self._fetch_id2dispname()
+        self.id2user = self._fetch_id2user()
+
         self.all_posts = {'order': [], 'posts': {}}
         self.after_time = after_time
         if after_time is not None:
@@ -81,17 +83,14 @@ class MattermostChannel:
         channel = self.mm_driver.channels.get_channel_by_name_and_team_name(self.team_name, self.channel_name)
         return channel['id']
 
-    def fetch_users(self) -> Dict:
-        users = self.mm_driver.channels.get_channel_members(self.channel_id)
-        id2user = {}
-        for user in users:
-            id2user[user["user_id"]] = user
-        return users, id2user
+    def _fetch_users(self) -> Dict:
+        users = [ self.mm_driver.users.get_user(user_id) for user_id in self.user_ids]
+        return users
 
-    def fetch_user_ids(self) -> List[str]:
-        return [user["user_id"] for user in self.users]
+    def _fetch_user_ids(self) -> List[str]:
+        return [user["user_id"] for user in self.mm_driver.channels.get_channel_members(self.channel_id)]
 
-    def fetch_usernames_and_ids(self) -> Dict[str, str]:
+    def _fetch_usernames_and_ids(self) -> Dict[str, str]:
         """
         Fetch usernames based on user_ids.
         
@@ -100,12 +99,23 @@ class MattermostChannel:
         """
         id2name = {}
         name2id = {}
-        for user_id in self.user_ids:
-            user = self.mm_driver.users.get_user(user_id)
+        for user in self.users:
+            user_id = user["id"]
             username = user['username']
             id2name[user_id] = username
             name2id[username] = user_id
         return id2name, name2id
+
+    def _fetch_id2user(self) -> Dict[str, Dict]:
+        """        
+        Returns:
+            A dictionary where keys are user_ids and values are corresponding user data.
+        """
+        id2user = {}
+        for user in self.users:
+            user_id = user["id"]
+            id2user[user_id] = user
+        return id2user
 
     def get_username_by_id(self, user_id: str) -> Optional[str]:
         """
@@ -134,25 +144,24 @@ class MattermostChannel:
         """
         return self.name2id.get(username, None)
 
-    def fetch_dispnames(self) -> Dict[str, str]:
+    def _fetch_id2dispname(self) -> Dict[str, str]:
         """
-        Fetch display-names based on user_id user_ids.
+        Fetch display-names based on user_ids.
         
         Returns:
             A dictionary where keys are user_ids and values are corresponding display-names.
         """
-        dispnames = {}
+        id2dispname = {}
         for user in self.users:
-            user_id = user["user_id"]
-            user_data = self.mm_driver.users.get_user(user_id)
-            if user_data.get("nickname", "").strip():
-                dispnames[user_id] = user_data["nickname"]
+            user_id = user["id"]
+            if user.get("nickname", "").strip():
+                id2dispname[user_id] = user["nickname"]
             else:
-                name_parts = [user_data.get("first_name", ""), user_data.get("last_name", "")]
+                name_parts = [user.get("first_name", ""), user.get("last_name", "")]
                 full_name = " ".join(part for part in name_parts if part)
-                dispnames[user_id] = full_name if full_name.strip() else "Unknown"
+                id2dispname[user_id] = full_name if full_name.strip() else "Unknown"
 
-        return dispnames
+        return id2dispname
 
     def get_dispname_by_id(self, user_id: str) -> Optional[str]:
         """
@@ -161,7 +170,7 @@ class MattermostChannel:
         Returns:
             Username corresponding to the user_id or None if not found.
         """
-        return self.dispnames.get(user_id, None)
+        return self.id2dispname.get(user_id, None)
 
     def fetch_posts(self, page_size=100) -> Dict:
         """
@@ -249,7 +258,7 @@ class MattermostChannel:
                 if use_past_record and post_date <= self.after_time:
                     post_date = self.fetch_last_post_datetime_from_record(user_id, app_name)
                 if use_admin_stop:
-                    stop_date = self.fetch_stop_until(user_id, app_name)
+                    stop_date = self.fetch_stop_until(user_id)
                     if stop_date > post_date:
                         post_date = stop_date
                 last_post_dates[user_id] = post_date
@@ -338,10 +347,16 @@ class MattermostChannel:
 
         if self.stdout_mode:
             print(payload)
+            return True
         else:
-            self.mm_driver.posts.create_post(payload)
-        
-        return payload
+            try:
+                response = self.mm_driver.posts.create_post(payload)
+                if 'id' in response:
+                    return True
+                else:
+                    return False
+            except Exception as e:
+                return False
 
     def filter_posts_by_criteria(self, criteria: Dict[str, Any], posts: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         if posts is None:
