@@ -364,16 +364,27 @@ class MattermostChannel:
 
         def match_criteria(data: Dict[str, Any], criteria: Dict[str, Any]) -> bool:
             for key, value in criteria.items():
-                if key not in data:
-                    return False
-                elif value is Anything:
+                try:
+                    if key not in data:
+                        return False
+                except:
+                    if key not in list(data.keys()):
+                        return False
+
+                if value is Anything:
                     continue
                 elif isinstance(value, dict):
                     if not match_criteria(data[key], value):
                         return False
-                elif isinstance(value, (set, list)) and isinstance(data[key], (set, list)):
-                    if not set(value).issubset(data[key]):
-                        return False
+                elif isinstance(value, (set, list)) and isinstance(data[key], list):
+                    try:
+                        value_set = set(value)
+                        if not value_set.issubset(data[key]):
+                            return False
+                    except:
+                        data_key = data[key]
+                        if not all(val in data_key for val in value):
+                            return False
                 elif data[key] != value:
                     return False
             return True
