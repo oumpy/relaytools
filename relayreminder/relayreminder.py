@@ -230,6 +230,9 @@ class MattermostChannel:
             # Skip deleted post (default)
             if ignore_deleted_posts and post['delete_at'] != 0:
                 continue
+            # Skip joining channel
+            if post.get("type", "") == "system_join_leave":
+                continue
 
             if user_id in user_ids:
                 if (priority_filter is None or priority == priority_filter) and \
