@@ -74,9 +74,8 @@ class MattermostChannel:
 
         self.all_posts = {'order': [], 'posts': {}}
         self.after_time = after_time
-        if after_time is not None:
-            self.fetch_posts()
-        self.stop_data = self.fetch_stop_data()
+        self._fetch_posts()
+        self.stop_data = self._fetch_stop_data()
         self.stdout_mode = stdout_mode
 
     def _get_channel_id(self) -> str:
@@ -172,7 +171,7 @@ class MattermostChannel:
         """
         return self.id2dispname.get(user_id, None)
 
-    def fetch_posts(self, page_size=100) -> Dict:
+    def _fetch_posts(self, page_size=100) -> Dict:
         """
         Fetch all posts in the channel since 'after_time' using pagination.
 
@@ -211,7 +210,7 @@ class MattermostChannel:
         self.all_posts = aggregated_posts  # Update the all_posts property
         return aggregated_posts
 
-    def fetch_last_post_datetimes(self, 
+    def get_last_post_datetimes(self, 
         user_ids: Optional[List[str]] = None,
         priority_filter: Optional[str] = None,
         is_thread_head: Optional[bool] = None,
@@ -254,19 +253,19 @@ class MattermostChannel:
            (is_thread_head is None or is_thread_head):
             for user_id, post_date in last_post_dates.items():
                 if regard_join_as_post and post_date <= self.after_time:
-                    post_date = self.fetch_join_datetime(user_id)
+                    post_date = self.get_join_datetime(user_id)
                 if use_past_record and post_date <= self.after_time:
-                    post_date = self.fetch_last_post_datetime_from_record(user_id, app_name)
+                    post_date = self.get_last_post_datetime_from_record(user_id, app_name)
                 if use_admin_stop:
-                    stop_date = self.fetch_stop_until(user_id)
+                    stop_date = self.get_stop_until(user_id)
                     if stop_date > post_date:
                         post_date = stop_date
                 last_post_dates[user_id] = post_date
 
         return last_post_dates
 
-    def fetch_join_datetime(self, user_id: str) -> datetime:
-        """Fetch the date when a user joined the channel using system messages."""
+    def get_join_datetime(self, user_id: str) -> datetime:
+        """Get the date when a user joined the channel using system messages."""
         criteria = [
             {
                 "type": "system_join_channel",
@@ -291,7 +290,7 @@ class MattermostChannel:
 
         return join_time
 
-    def fetch_last_post_datetime_from_record(self, user_id: str, app_name: Optional[str] = None) -> datetime:
+    def get_last_post_datetime_from_record(self, user_id: str, app_name: Optional[str] = None) -> datetime:
         criteria = {
             "props": {
                 "type": "record",
@@ -308,7 +307,7 @@ class MattermostChannel:
         else:
             return self.after_time
 
-    def fetch_stop_data(self, app_name: Optional[str] = None) -> datetime:
+    def _fetch_stop_data(self, app_name: Optional[str] = None) -> datetime:
         criteria = {
             "props": {
                 "type": "relaystop",
@@ -325,7 +324,7 @@ class MattermostChannel:
         else:
             return dict()
 
-    def fetch_stop_until(self, user_id: str) -> datetime:
+    def get_stop_until(self, user_id: str) -> datetime:
         if user_id in self.stop_data:
             until_date = parser.parse(self.stop_data[user_id])
             return datetime(until_date.year, until_date.month, until_date.day)
@@ -563,8 +562,8 @@ def main(args: argparse.Namespace):
         )
         return
 
-    # Fetch last post dates for all user_ids
-    last_post_dates = mm_channel.fetch_last_post_datetimes(
+    # Get last post dates for all user_ids
+    last_post_dates = mm_channel.get_last_post_datetimes(
         priority_filter="standard",
         is_thread_head=True,
         app_name=args.app_name,
@@ -699,7 +698,7 @@ def create_slashcommand_app(args):
             after_time = BASE_TIME,
             stdout_mode = args.stdout_mode,
         )
-        last_post_datetimes = mm_channel.fetch_last_post_datetimes(
+        last_post_datetimes = mm_channel.get_last_post_datetimes(
             priority_filter="standard",
             is_thread_head=True,
             app_name=args.app_name,
@@ -756,8 +755,8 @@ def create_slashcommand_app(args):
             stdout_mode = args.stdout_mode,
         )
         user_id = data.get("user_id")
-        last_post_datetime_all = mm_channel.fetch_last_post_datetimes(user_ids=[user_id], app_name=args.app_name)[user_id]
-        last_post_datetime_standard_channel = mm_channel.fetch_last_post_datetimes(user_ids=[user_id], priority_filter="standard", is_thread_head=True, app_name=args.app_name)[user_id]
+        last_post_datetime_all = mm_channel.get_last_post_datetimes(user_ids=[user_id], app_name=args.app_name)[user_id]
+        last_post_datetime_standard_channel = mm_channel.get_last_post_datetimes(user_ids=[user_id], priority_filter="standard", is_thread_head=True, app_name=args.app_name)[user_id]
 
         if last_post_datetime_standard_channel == BASE_TIME:
             last_post_datetime_standard_channel_str = args.whenmylast_datetime_never
