@@ -22,6 +22,7 @@ from dotenv import load_dotenv
 import subprocess
 from flask import Flask, request, jsonify, g
 from dateutil import parser
+import requests
 
 BASE_TIME = datetime(1,1,3)
 BASE_DATE = BASE_TIME.date() # Monday
@@ -60,12 +61,19 @@ class MattermostChannel:
     ):
         self.mm_driver = Driver(driver_params)
         self.mm_driver.login()
+        self.headers = {
+            "Authorization": "Bearer {}".format(driver_params["token"]),
+            "Content-Type": "application/json",
+        }
+        self.base_url = driver_params.get("scheme","https") + "://" + driver_params["url"] + ":" + str(driver_params.get("port", 433))
+
         if channel_id:
             self.channel_id = channel_id
         else:
             self.team_name = team_name
             self.channel_name = channel_name
             self.channel_id = self._get_channel_id()
+        self.team_id = self.mm_driver.channels.get_channel(self.channel_id)["team_id"]
         self.user_ids = self._fetch_user_ids()
         self.users = self._fetch_users()
         self.id2name, self.name2id = self._fetch_usernames_and_ids()
@@ -396,23 +404,33 @@ class MattermostChannel:
 
         return sorted_filtered_posts
 
-    def unfollow_thread_for_user(self, post_id: str, user_id: str):
+    def unfollow_thread_for_users(self, post_id: str, user_ids: Union[list, set, str]):
         """
         Unfollow a thread for a specific user.
 
         Args:
             post_id (str): The ID of a post within the thread.
-            user_id (str): The ID of the user whose follow status should be changed.
+            user_ids (list/set/str): The IDs of the users whose follow status should be changed.
         """
         # If in stdout_mode, print the action and return
         if self.stdout_mode:
-            print(f"Unfollow action called for post ID '{post_id}' for user ID '{user_id}'")
-            return None
+            print(f"Unfollow action called for post ID '{post_id}' for user IDs '{user_id}'")
+        else:
+            # Actually perform the unfollow action
+            # Get the thread_id from the post_id
+            thread_url = os.path.join(self.base_url, "threads", post_id)
+            thread_response = requests.get(thread_url, headers=self.headers)
+            thread_data = thread_response.json()
+            thread_id = thread_data['id']
 
-        # Actually perform the unfollow action
-        result = self.mm_driver.posts.unfollow_post_for_user(user_id, post_id)
-        return result
+            # Stop the user following the thread
+            if isinstance(user_ids, str):
+                user_ids = user_ids.split()
 
+            for user_id in user_ids:
+                stop_url = os.path.join(self.base_url, "users", user_id, "teams", self.team_id, "threads", thread_id, "following")
+                requests.delete(stop_url, headers=self.headers)
+        return
 
 def load_tsv_data(file_path: str) -> Dict[int, str]:
     data = {}
@@ -613,8 +631,7 @@ def main(args: argparse.Namespace):
                 post = matching_posts[-1]
                 post_id = post['id']
                 root_id = post.get('root_id', post_id)
-                for user_id in set(post['props']['users']) - set(sorted_user_ids):
-                    mm_channel.unfollow_thread_for_user(post_id, user_id)
+                mm_channel.unfollow_thread_for_users(post_id, set(post['props']['users']) - set(sorted_user_ids))
             else:
                 root_id = None
 
