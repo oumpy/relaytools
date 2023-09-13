@@ -22,6 +22,7 @@ from dotenv import load_dotenv
 import subprocess
 from flask import Flask, request, jsonify, g
 from dateutil import parser
+import requests
 
 BASE_TIME = datetime(1,1,3)
 BASE_DATE = BASE_TIME.date() # Monday
@@ -60,12 +61,19 @@ class MattermostChannel:
     ):
         self.mm_driver = Driver(driver_params)
         self.mm_driver.login()
+        self.headers = {
+            "Authorization": "Bearer {}".format(driver_params["token"]),
+            "Content-Type": "application/json",
+        }
+        self.base_url = driver_params.get("scheme","https") + "://" + driver_params["url"] + ":" + str(driver_params.get("port", 433))
+
         if channel_id:
             self.channel_id = channel_id
         else:
             self.team_name = team_name
             self.channel_name = channel_name
             self.channel_id = self._get_channel_id()
+        self.team_id = self.mm_driver.channels.get_channel(self.channel_id)["team_id"]
         self.user_ids = self._fetch_user_ids()
         self.users = self._fetch_users()
         self.id2name, self.name2id = self._fetch_usernames_and_ids()
@@ -74,9 +82,8 @@ class MattermostChannel:
 
         self.all_posts = {'order': [], 'posts': {}}
         self.after_time = after_time
-        if after_time is not None:
-            self.fetch_posts()
-        self.stop_data = self.fetch_stop_data()
+        self._fetch_posts()
+        self.stop_data = self._fetch_stop_data()
         self.stdout_mode = stdout_mode
 
     def _get_channel_id(self) -> str:
@@ -172,7 +179,7 @@ class MattermostChannel:
         """
         return self.id2dispname.get(user_id, None)
 
-    def fetch_posts(self, page_size=100) -> Dict:
+    def _fetch_posts(self, page_size=100) -> Dict:
         """
         Fetch all posts in the channel since 'after_time' using pagination.
 
@@ -211,7 +218,7 @@ class MattermostChannel:
         self.all_posts = aggregated_posts  # Update the all_posts property
         return aggregated_posts
 
-    def fetch_last_post_datetimes(self, 
+    def get_last_post_datetimes(self, 
         user_ids: Optional[List[str]] = None,
         priority_filter: Optional[str] = None,
         is_thread_head: Optional[bool] = None,
@@ -254,19 +261,19 @@ class MattermostChannel:
            (is_thread_head is None or is_thread_head):
             for user_id, post_date in last_post_dates.items():
                 if regard_join_as_post and post_date <= self.after_time:
-                    post_date = self.fetch_join_datetime(user_id)
+                    post_date = self.get_join_datetime(user_id)
                 if use_past_record and post_date <= self.after_time:
-                    post_date = self.fetch_last_post_datetime_from_record(user_id, app_name)
+                    post_date = self.get_last_post_datetime_from_record(user_id, app_name)
                 if use_admin_stop:
-                    stop_date = self.fetch_stop_until(user_id)
+                    stop_date = self.get_stop_until(user_id)
                     if stop_date > post_date:
                         post_date = stop_date
                 last_post_dates[user_id] = post_date
 
         return last_post_dates
 
-    def fetch_join_datetime(self, user_id: str) -> datetime:
-        """Fetch the date when a user joined the channel using system messages."""
+    def get_join_datetime(self, user_id: str) -> datetime:
+        """Get the date when a user joined the channel using system messages."""
         criteria = [
             {
                 "type": "system_join_channel",
@@ -291,7 +298,7 @@ class MattermostChannel:
 
         return join_time
 
-    def fetch_last_post_datetime_from_record(self, user_id: str, app_name: Optional[str] = None) -> datetime:
+    def get_last_post_datetime_from_record(self, user_id: str, app_name: Optional[str] = None) -> datetime:
         criteria = {
             "props": {
                 "type": "record",
@@ -308,7 +315,7 @@ class MattermostChannel:
         else:
             return self.after_time
 
-    def fetch_stop_data(self, app_name: Optional[str] = None) -> datetime:
+    def _fetch_stop_data(self, app_name: Optional[str] = None) -> datetime:
         criteria = {
             "props": {
                 "type": "relaystop",
@@ -325,7 +332,7 @@ class MattermostChannel:
         else:
             return dict()
 
-    def fetch_stop_until(self, user_id: str) -> datetime:
+    def get_stop_until(self, user_id: str) -> datetime:
         if user_id in self.stop_data:
             until_date = parser.parse(self.stop_data[user_id])
             return datetime(until_date.year, until_date.month, until_date.day)
@@ -364,16 +371,27 @@ class MattermostChannel:
 
         def match_criteria(data: Dict[str, Any], criteria: Dict[str, Any]) -> bool:
             for key, value in criteria.items():
-                if key not in data:
-                    return False
-                elif value is Anything:
+                try:
+                    if key not in data:
+                        return False
+                except:
+                    if key not in list(data.keys()):
+                        return False
+
+                if value is Anything:
                     continue
                 elif isinstance(value, dict):
                     if not match_criteria(data[key], value):
                         return False
-                elif isinstance(value, (set, list)) and isinstance(data[key], (set, list)):
-                    if not set(value).issubset(data[key]):
-                        return False
+                elif isinstance(value, (set, list)) and isinstance(data[key], list):
+                    try:
+                        value_set = set(value)
+                        if not value_set.issubset(data[key]):
+                            return False
+                    except:
+                        data_key = data[key]
+                        if not all(val in data_key for val in value):
+                            return False
                 elif data[key] != value:
                     return False
             return True
@@ -386,23 +404,33 @@ class MattermostChannel:
 
         return sorted_filtered_posts
 
-    def unfollow_thread_for_user(self, post_id: str, user_id: str):
+    def unfollow_thread_for_users(self, post_id: str, user_ids: Union[list, set, str]):
         """
         Unfollow a thread for a specific user.
 
         Args:
             post_id (str): The ID of a post within the thread.
-            user_id (str): The ID of the user whose follow status should be changed.
+            user_ids (list/set/str): The IDs of the users whose follow status should be changed.
         """
         # If in stdout_mode, print the action and return
         if self.stdout_mode:
-            print(f"Unfollow action called for post ID '{post_id}' for user ID '{user_id}'")
-            return None
+            print(f"Unfollow action called for post ID '{post_id}' for user IDs '{user_id}'")
+        else:
+            # Actually perform the unfollow action
+            # Get the thread_id from the post_id
+            thread_url = os.path.join(self.base_url, "threads", post_id)
+            thread_response = requests.get(thread_url, headers=self.headers)
+            thread_data = thread_response.json()
+            thread_id = thread_data['id']
 
-        # Actually perform the unfollow action
-        result = self.mm_driver.posts.unfollow_post_for_user(user_id, post_id)
-        return result
+            # Stop the user following the thread
+            if isinstance(user_ids, str):
+                user_ids = user_ids.split()
 
+            for user_id in user_ids:
+                stop_url = os.path.join(self.base_url, "users", user_id, "teams", self.team_id, "threads", thread_id, "following")
+                requests.delete(stop_url, headers=self.headers)
+        return
 
 def load_tsv_data(file_path: str) -> Dict[int, str]:
     data = {}
@@ -552,8 +580,8 @@ def main(args: argparse.Namespace):
         )
         return
 
-    # Fetch last post dates for all user_ids
-    last_post_dates = mm_channel.fetch_last_post_datetimes(
+    # Get last post dates for all user_ids
+    last_post_dates = mm_channel.get_last_post_datetimes(
         priority_filter="standard",
         is_thread_head=True,
         app_name=args.app_name,
@@ -603,8 +631,7 @@ def main(args: argparse.Namespace):
                 post = matching_posts[-1]
                 post_id = post['id']
                 root_id = post.get('root_id', post_id)
-                for user_id in set(post['props']['users']) - set(sorted_user_ids):
-                    mm_channel.unfollow_thread_for_user(post_id, user_id)
+                mm_channel.unfollow_thread_for_users(post_id, set(post['props']['users']) - set(sorted_user_ids))
             else:
                 root_id = None
 
@@ -688,7 +715,7 @@ def create_slashcommand_app(args):
             after_time = BASE_TIME,
             stdout_mode = args.stdout_mode,
         )
-        last_post_datetimes = mm_channel.fetch_last_post_datetimes(
+        last_post_datetimes = mm_channel.get_last_post_datetimes(
             priority_filter="standard",
             is_thread_head=True,
             app_name=args.app_name,
@@ -745,8 +772,8 @@ def create_slashcommand_app(args):
             stdout_mode = args.stdout_mode,
         )
         user_id = data.get("user_id")
-        last_post_datetime_all = mm_channel.fetch_last_post_datetimes(user_ids=[user_id], app_name=args.app_name)[user_id]
-        last_post_datetime_standard_channel = mm_channel.fetch_last_post_datetimes(user_ids=[user_id], priority_filter="standard", is_thread_head=True, app_name=args.app_name)[user_id]
+        last_post_datetime_all = mm_channel.get_last_post_datetimes(user_ids=[user_id], app_name=args.app_name)[user_id]
+        last_post_datetime_standard_channel = mm_channel.get_last_post_datetimes(user_ids=[user_id], priority_filter="standard", is_thread_head=True, app_name=args.app_name)[user_id]
 
         if last_post_datetime_standard_channel == BASE_TIME:
             last_post_datetime_standard_channel_str = args.whenmylast_datetime_never
