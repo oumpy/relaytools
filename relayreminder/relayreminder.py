@@ -248,7 +248,7 @@ class MattermostChannel:
             user_id = post['user_id']
             create_at = datetime.fromtimestamp(post['create_at'] / 1000)
             root_id = post.get('root_id', '')
-            priority = post['metadata'].get('priority', {}).get('priority', 'standard').lower()
+            priority = post.get('metadata', {}).get('priority', {}).get('priority', 'standard').lower() or 'standard'
 
             # Skip deleted post (default)
             if ignore_deleted_posts and post['delete_at'] != 0:
@@ -268,9 +268,13 @@ class MattermostChannel:
            (is_thread_head is None or is_thread_head):
             for user_id, post_date in last_post_dates.items():
                 if regard_join_as_post and post_date <= self.after_time:
-                    post_date = self.get_join_datetime(user_id)
+                    join_date = self.get_join_datetime(user_id)
+                    if join_date > post_date:
+                        post_date = join_date
                 if use_past_record and post_date <= self.after_time:
-                    post_date = self.get_last_post_datetime_from_record(user_id, app_name)
+                    record_date = self.get_last_post_datetime_from_record(user_id, app_name)
+                    if record_date > post_date:
+                        post_date = record_date
                 if use_admin_stop:
                     stop_date = self.get_stop_until(user_id)
                     if stop_date > post_date:
