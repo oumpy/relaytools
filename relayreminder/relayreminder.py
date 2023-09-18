@@ -695,7 +695,7 @@ def create_slashcommand_app(args):
             parser.add_argument("min-weeks", nargs="?", type=int, default=args.blacklist_minweek_default)
             parser.add_argument("max-weeks", nargs="?", type=int, default=-1)
             parser.add_argument("--important", action="store_true")
-            parser.add_argument("--onlyme", action="store_true")
+            parser.add_argument("--post", action="store_true")
             slash_args = parser.parse_args(shlex.split(data.get("text")))
 
             min_weeks = getattr(slash_args, "min-weeks")
@@ -709,10 +709,10 @@ def create_slashcommand_app(args):
             else:
                 priority = "standard"
 
-            if getattr(slash_args, "onlyme"):
-                response_type = "ephemeral"
-            else:
+            if getattr(slash_args, "post"):
                 response_type = "in_channel"
+            else:
+                response_type = "ephemeral"
 
         except:
             return jsonify(
@@ -722,7 +722,7 @@ def create_slashcommand_app(args):
                     "attachments": [
                         {
                             "title": "Usage",
-                            "text": "/blacklist min_weeks [max_weeks]",
+                            "text": "/blacklist [min_weeks] [max_weeks] [--post]",
                         },
                     ],
                 },
