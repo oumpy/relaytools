@@ -23,6 +23,7 @@ import subprocess
 from flask import Flask, request, jsonify, g
 from dateutil import parser
 import requests
+import shlex
 
 BASE_TIME = datetime(1,1,3)
 BASE_DATE = BASE_TIME.date() # Monday
@@ -689,17 +690,30 @@ def create_slashcommand_app(args):
         if token != os.environ["MATTERMOST_BLACKLIST_TOKEN"]:
             return jsonify({"text": "Invalid token"}), 403
 
-        slash_args = data.get("text").split()
         try:
-            if len(slash_args) == 0:
-                min_weeks = args.blacklist_minweek_default
-                max_weeks = float("inf")
-            elif len(slash_args) == 1:
-                min_weeks = int(slash_args[0])
+            parser = argparse.ArgumentParser()
+            parser.add_argument("min-weeks", nargs="?", type=int, default=args.blacklist_minweek_default)
+            parser.add_argument("max-weeks", nargs="?", type=int, default=-1)
+            parser.add_argument("--important", action="store_true")
+            parser.add_argument("--onlyme", action="store_true")
+            slash_args = parser.parse_args(shlex.split(data.get("text")))
+
+            min_weeks = getattr(slash_args, "min-weeks")
+            if getattr(slash_args, "max-weeks") < 0:
                 max_weeks = float("inf")
             else:
-                min_weeks = int(slash_args[0])
-                max_weeks = int(slash_args[1])
+                max_weeks = getattr(slash_args, "max-weeks")
+
+            if getattr(slash_args, "important"):
+                priority = "important"
+            else:
+                priority = "standard"
+
+            if getattr(slash_args, "onlyme"):
+                response_type = "ephemeral"
+            else:
+                response_type = "in_channel"
+
         except:
             return jsonify(
                 {
@@ -752,8 +766,9 @@ def create_slashcommand_app(args):
         )
 
         return jsonify({
-            "response_type": "in_channel",
+            "response_type": response_type,
             "text": message,
+            "priority": priority,
             }
         )
 
