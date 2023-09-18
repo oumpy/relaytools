@@ -40,15 +40,6 @@ class either:
     def __iter__(self):
         return iter(self.values)
 
-def get_week_number(target_date: Union[datetime, date]) -> int:
-    if isinstance(target_date, datetime):
-        target_date = target_date.date()
-
-    delta_days = (target_date - BASE_DATE).days
-    week_number = delta_days // 7
-
-    return week_number
-
 Anything = object()
 class MattermostChannel:
     def __init__(self,
@@ -56,8 +47,9 @@ class MattermostChannel:
         team_name: str = "main",
         channel_name: str = "",
         channel_id: Optional[str] = None,
-        after_time: Optional[datetime] = None,
+        after_weeksago: Optional[int] = None,
         stdout_mode: bool = False,
+        week_shift_hours: int = 0,
     ):
         self.mm_driver = Driver(driver_params)
         self.mm_driver.login()
@@ -66,6 +58,11 @@ class MattermostChannel:
             "Content-Type": "application/json",
         }
         self.base_url = driver_params.get("scheme","https") + "://" + driver_params["url"] + ":" + str(driver_params.get("port", 433))
+
+        if after_weeksago is None:
+            self.after_time = BASE_TIME
+        else:
+            self.after_time = self.get_start_of_week_n_weeks_ago(after_weeksago)
 
         if channel_id:
             self.channel_id = channel_id
@@ -81,10 +78,19 @@ class MattermostChannel:
         self.id2user = self._fetch_id2user()
 
         self.all_posts = {'order': [], 'posts': {}}
-        self.after_time = after_time
         self._fetch_posts()
         self.stop_data = self._fetch_stop_data()
         self.stdout_mode = stdout_mode
+        self.week_shift_hours = week_shift_hours
+
+    def get_week_number(self, target_datetime: Union[datetime, date]) -> int:
+        if isinstance(target_datetime, date):
+            target_datetime = datetime(target_datetime.year, target_datetime.month, target_datetime.day)
+
+        delta_days = (target_datetime - BASE_TIME - timedelta(hours=self.week_shift_hours)).days
+        week_number = delta_days // 7
+
+        return week_number
 
     def _get_channel_id(self) -> str:
         channel = self.mm_driver.channels.get_channel_by_name_and_team_name(self.team_name, self.channel_name)
@@ -311,7 +317,7 @@ class MattermostChannel:
         posts = self.filter_posts_by_criteria(criteria)
         if posts:
             last_post_week = posts[-1]["props"]["last_post_week"]
-            return get_start_of_week(last_post_week)
+            return self.get_start_of_week(last_post_week)
         else:
             return self.after_time
 
@@ -335,7 +341,7 @@ class MattermostChannel:
     def get_stop_until(self, user_id: str) -> datetime:
         if user_id in self.stop_data:
             until_date = parser.parse(self.stop_data[user_id])
-            return datetime(until_date.year, until_date.month, until_date.day)
+            return datetime(until_date.year, until_date.month, until_date.day) + timedelta(hours=self.week_shift_hours)
         return self.after_time
 
     def send_post(self, message: str, props: Optional[Dict] = None, root_id: Optional[str] = None) -> Dict:
@@ -432,6 +438,19 @@ class MattermostChannel:
                 requests.delete(stop_url, headers=self.headers)
         return
 
+    def get_start_of_week_n_weeks_ago(self, n: int) -> datetime:
+        now = datetime.now()
+        shifted_now = now - timedelta(hours=self.week_shift_hours)  # Get now
+        shifted_today = now.date()
+        start_of_this_week = shifted_today - timedelta(days=shifted_now.date().weekday())  # Get Monday of this week
+        target_date = start_of_this_week - timedelta(weeks=n)  # Get Monday n-weeks ago
+        return datetime(target_date.year, target_date.month, target_date.day) + timedelta(hours=self.week_shift_hours)
+
+    def get_start_of_week(self, n: int) -> datetime:
+        target_time = BASE_TIME + timedelta(weeks=n, hours=self.week_shift_hours)  # Get Monday of n-th week
+        return target_time
+
+
 def load_tsv_data(file_path: str) -> Dict[int, str]:
     data = {}
     with open(file_path, 'r', encoding='utf-8') as f:
@@ -457,16 +476,6 @@ def load_tsv_data(file_path: str) -> Dict[int, str]:
 
             data[week_number] = re.sub(r'\\n', '\n', parts[1])
     return data
-
-def get_start_of_week_n_weeks_ago(n: int) -> datetime:
-    today = datetime.now().date()  # Get today
-    start_of_this_week = today - timedelta(days=today.weekday())  # Get Monday of this week
-    target_date = start_of_this_week - timedelta(weeks=n)  # Get Monday n-weeks ago
-    return datetime(target_date.year, target_date.month, target_date.day)
-
-def get_start_of_week(n: int) -> datetime:
-    target_time = BASE_TIME + timedelta(weeks=n)  # Get Monday of n-th week
-    return target_time
 
 def load_envs():
     app_dir = os.path.join(os.path.expanduser("~"), ".relayreminder")
@@ -496,6 +505,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--all-history", action="store_true",
                         default=bool(strtobool(os.environ.get("RELAYREMINDER_ALL_HISTORY", "false"))),
                         help="Search all history of the channel.")
+    parser.add_argument("--week-shift-hours", type=int, default=int(os.environ.get("RELAYREMINDER_WEEK_SHIFT_HOURS", 0)), help="Shift the beginning of weeks by n-hours.")
 
     # slashcommand mode
     parser.add_argument("--slashcommand-mode", action="store_true",
@@ -527,6 +537,7 @@ def parse_args() -> argparse.Namespace:
     os.environ["RELAYREMINDER_MENTION_FORMAT"] = args.mention_format
     os.environ["RELAYREMINDER_STDOUT_MODE"] = str(args.stdout_mode)
     os.environ["RELAYREMINDER_ALL_HISTORY"] = str(args.all_history)
+    os.environ["RELAYREMINDER_WEEK_SHIFT_HOURS"] = str(args.week_shift_hours)
 
     # slashcommand mode
     os.environ["RELAYREMINDER_SLASHCOMMAND_MODE"] = str(args.slashcommand_mode)
@@ -557,16 +568,17 @@ def main(args: argparse.Namespace):
     max_week_limit = message_passed_weeks_list[-1]
 
     if args.all_history:
-        after_time = BASE_TIME
+        after_weeksago = None
     else:
-        after_time = get_start_of_week_n_weeks_ago(max_week_limit),
+        after_weeksago = max_week_limit
 
     mm_channel = MattermostChannel(
         driver_params,
         args.team,
         args.channel,
-        after_time = after_time,
+        after_weeksago = after_weeksago,
         stdout_mode = args.stdout_mode,
+        week_shift_hours = args.week_shift_hours,
     )
 
     if args.initialize:
@@ -591,9 +603,9 @@ def main(args: argparse.Namespace):
     )
 
     # Convert dates to week numbers
-    last_post_weeks = {user_id: get_week_number(date) for user_id, date in last_post_dates.items()}
-    current_week_number = get_week_number(datetime.now())
-    
+    last_post_weeks = {user_id: mm_channel.get_week_number(date) for user_id, date in last_post_dates.items()}
+    current_week_number = mm_channel.get_week_number(datetime.now())
+
     # Find users and message based on last post week number
     users_to_notify = {}
     for user_id, week in last_post_weeks.items():
@@ -712,7 +724,6 @@ def create_slashcommand_app(args):
             driver_params,
             args.team,
             args.channel,
-            after_time = BASE_TIME,
             stdout_mode = args.stdout_mode,
         )
         last_post_datetimes = mm_channel.get_last_post_datetimes(
@@ -725,10 +736,10 @@ def create_slashcommand_app(args):
         )
 
         # Convert dates to week numbers
-        current_week_number = get_week_number(datetime.now())
+        current_week_number = mm_channel.get_week_number(datetime.now())
         passed_weeks_list = sorted([(user_id, post_time) 
                                     for user_id, post_time in last_post_datetimes.items()
-                                    if min_weeks <= current_week_number - get_week_number(post_time) <= max_weeks],
+                                    if min_weeks <= current_week_number - mm_channel.get_week_number(post_time) <= max_weeks],
                                     key=lambda x: x[1], reverse=True)
 
         if max_weeks == float("inf"):
@@ -737,7 +748,7 @@ def create_slashcommand_app(args):
             message = args.blacklist_message_minmax.format(min_weeks, max_weeks)
         message = (
             message + "\n"
-            + "\n".join([f"{mm_channel.get_dispname_by_id(user_id)} [{mm_channel.get_username_by_id(user_id)}] ({current_week_number - get_week_number(post_time)})"  for user_id, post_time in passed_weeks_list])
+            + "\n".join([f"{mm_channel.get_dispname_by_id(user_id)} [{mm_channel.get_username_by_id(user_id)}] ({current_week_number - mm_channel.get_week_number(post_time)})"  for user_id, post_time in passed_weeks_list])
         )
 
         return jsonify({
@@ -768,7 +779,6 @@ def create_slashcommand_app(args):
         mm_channel = MattermostChannel(
             driver_params,
             channel_id = data.get("channel_id"),
-            after_time = BASE_TIME,
             stdout_mode = args.stdout_mode,
         )
         user_id = data.get("user_id")
@@ -818,7 +828,6 @@ def create_slashcommand_app(args):
             driver_params,
             team_name = args.team,
             channel_name = args.channel,
-            after_time = BASE_TIME,
             stdout_mode = args.stdout_mode,
         )
         exec_user_id = data.get("user_id")
