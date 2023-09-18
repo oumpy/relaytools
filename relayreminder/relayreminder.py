@@ -248,7 +248,7 @@ class MattermostChannel:
             user_id = post['user_id']
             create_at = datetime.fromtimestamp(post['create_at'] / 1000)
             root_id = post.get('root_id', '')
-            priority = post['metadata'].get('priority', {}).get('priority', 'standard').lower()
+            priority = post.get('metadata', {}).get('priority', {}).get('priority', 'standard').lower() or 'standard'
 
             # Skip deleted post (default)
             if ignore_deleted_posts and post['delete_at'] != 0:
