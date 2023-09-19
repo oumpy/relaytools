@@ -8,7 +8,7 @@
 # Lisence: GNU General Publice Lisence v3
 #
 
-from mattermostdriver import Driver
+from mattermostdriver import Driver, endpoints
 from datetime import datetime, date, timedelta
 import argparse
 from typing import List, Dict, Optional, Union, Any
@@ -83,6 +83,9 @@ class MattermostChannel:
         self.stop_data = self._fetch_stop_data()
         self.stdout_mode = stdout_mode
         self.week_shift_hours = week_shift_hours
+
+    def __del__(self):
+        self.mm_driver.logout()
 
     def get_week_number(self, target_datetime: Union[datetime, date]) -> int:
         if isinstance(target_datetime, date):
@@ -200,13 +203,20 @@ class MattermostChannel:
         page = 0
 
         while True:
-            posts = self.mm_driver.posts.get_posts_for_channel(
-                self.channel_id,
+            posts = self.mm_driver.posts.client.get(
+                endpoints.posts.Channels.endpoint + '/' + self.channel_id + '/posts',
                 params={
                     'since': int(self.after_time.timestamp() * 1000),
                     'per_page': page_size,
                     'page': page
-                }
+                },
+                options = {
+                    'fields' : [
+                        'id',
+                        'create_at', 'delete_at',
+                        'metadata', 'props', 'root_id',
+                    ],
+                },
             )
 
             if not posts['posts']:
