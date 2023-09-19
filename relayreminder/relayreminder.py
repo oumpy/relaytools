@@ -8,7 +8,7 @@
 # Lisence: GNU General Publice Lisence v3
 #
 
-from mattermostdriver import Driver
+from mattermostdriver import Driver, endpoints
 from datetime import datetime, date, timedelta
 import argparse
 from typing import List, Dict, Optional, Union, Any
@@ -203,13 +203,20 @@ class MattermostChannel:
         page = 0
 
         while True:
-            posts = self.mm_driver.posts.get_posts_for_channel(
-                self.channel_id,
+            posts = self.mm_driver.posts.client.get(
+                endpoints.posts.Channels.endpoint + '/' + self.channel_id + '/posts',
                 params={
                     'since': int(self.after_time.timestamp() * 1000),
                     'per_page': page_size,
                     'page': page
-                }
+                },
+                options = {
+                    'fields' : [
+                        'id',
+                        'create_at', 'delete_at',
+                        'metadata', 'props', 'root_id',
+                    ],
+                },
             )
 
             if not posts['posts']:
