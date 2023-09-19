@@ -84,6 +84,9 @@ class MattermostChannel:
         self.stdout_mode = stdout_mode
         self.week_shift_hours = week_shift_hours
 
+    def __del__(self):
+        self.mm_driver.logout()
+
     def get_week_number(self, target_datetime: Union[datetime, date]) -> int:
         if isinstance(target_datetime, date):
             target_datetime = datetime(target_datetime.year, target_datetime.month, target_datetime.day)
