@@ -25,8 +25,9 @@ from dateutil import parser
 import requests
 import shlex
 
-BASE_TIME = datetime(1,1,3)
+BASE_TIME = datetime(1,1,1)
 BASE_DATE = BASE_TIME.date() # Monday
+ANCIENT = UNIX_EPOCH = datetime.utcfromtimestamp(0)
 
 class either:
     def __init__(self, *values):
@@ -61,7 +62,7 @@ class MattermostChannel:
         self.base_url = driver_params.get("scheme","https") + "://" + driver_params["url"] + ":" + str(driver_params.get("port", 433))
 
         if after_weeksago is None:
-            self.after_time = BASE_TIME
+            self.after_time = ANCIENT
         else:
             self.after_time = self.get_start_of_week_n_weeks_ago(after_weeksago)
 
@@ -227,10 +228,12 @@ class MattermostChannel:
 
             page += 1  # Move to the next page
 
-        if self.after_time <= BASE_TIME and posts['posts']:
-            self.after_time = datetime.fromtimestamp(
-                aggregated_posts['posts'][aggregated_posts['order'][0]] / 1000
+        if aggregated_posts['posts']:
+            oldest_time = datetime.fromtimestamp(
+                aggregated_posts['posts'][aggregated_posts['order'][-1]]['create_at'] / 1000
             )
+            if oldest_time < self.after_time and aggregated_posts['posts']:
+                self.after_time = oldest_time
 
         self.all_posts = aggregated_posts  # Update the all_posts property
         return aggregated_posts
@@ -814,12 +817,12 @@ def create_slashcommand_app(args):
         last_post_datetime_all = mm_channel.get_last_post_datetimes(user_ids=[user_id], app_name=args.app_name)[user_id]
         last_post_datetime_standard_channel = mm_channel.get_last_post_datetimes(user_ids=[user_id], priority_filter="standard", is_thread_head=True, app_name=args.app_name)[user_id]
 
-        if last_post_datetime_standard_channel == BASE_TIME:
+        if last_post_datetime_standard_channel <= ANCIENT:
             last_post_datetime_standard_channel_str = args.whenmylast_datetime_never
         else:
             last_post_datetime_standard_channel_str = last_post_datetime_standard_channel.strftime(args.datetime_format)
 
-        if last_post_datetime_all == BASE_TIME:
+        if last_post_datetime_all <= ANCIENT:
             last_post_datetime_all_str = args.whenmylast_datetime_never
         else:
             last_post_datetime_all_str = last_post_datetime_all.strftime(args.datetime_format)
