@@ -25,7 +25,7 @@ from dateutil import parser
 import requests
 import shlex
 
-BASE_TIME = datetime(1,1,3)
+BASE_TIME = datetime(1,1,1)
 BASE_DATE = BASE_TIME.date() # Monday
 
 class either:
