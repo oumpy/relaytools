@@ -236,6 +236,7 @@ class MattermostChannel:
                 self.after_time = oldest_time
 
         self.all_posts = aggregated_posts  # Update the all_posts property
+        # print(*list(self.all_posts['posts'].values()), sep='\n')
         return aggregated_posts
 
     def get_last_post_datetimes(self, 
@@ -265,6 +266,9 @@ class MattermostChannel:
 
             # Skip deleted post (default)
             if ignore_deleted_posts and post['delete_at'] != 0:
+                continue
+            # Skip system post
+            if post['type'] != '':
                 continue
             # Skip joining channel
             # if post.get("type", "") == "system_join_leave":
