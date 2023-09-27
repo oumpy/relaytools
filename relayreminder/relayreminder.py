@@ -232,7 +232,7 @@ class MattermostChannel:
             oldest_time = datetime.fromtimestamp(
                 aggregated_posts['posts'][aggregated_posts['order'][-1]]['create_at'] / 1000
             )
-            if oldest_time < self.after_time and aggregated_posts['posts']:
+            if oldest_time > self.after_time:
                 self.after_time = oldest_time
 
         self.all_posts = aggregated_posts  # Update the all_posts property
