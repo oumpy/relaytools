@@ -442,14 +442,11 @@ class MattermostChannel:
         """
         # If in stdout_mode, print the action and return
         if self.stdout_mode:
-            print(f"Unfollow action called for post ID '{post_id}' for user IDs '{user_id}'")
+            print(f"Unfollow action called for post ID '{post_id}' for user IDs '{user_ids}'")
         else:
             # Actually perform the unfollow action
             # Get the thread_id from the post_id
-            thread_url = os.path.join(self.base_url, "threads", post_id)
-            thread_response = requests.get(thread_url, headers=self.headers)
-            thread_data = thread_response.json()
-            thread_id = thread_data['id']
+            thread_id = self.all_posts['posts'][post_id]['root_id'] or post_id
 
             # Stop the user following the thread
             if isinstance(user_ids, str):
