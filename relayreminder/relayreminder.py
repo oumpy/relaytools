@@ -661,7 +661,7 @@ def main(args: argparse.Namespace):
             if matching_posts:
                 post = matching_posts[-1]
                 post_id = post['id']
-                root_id = post.get('root_id', post_id)
+                root_id = post['root_id'] or post_id
                 mm_channel.unfollow_thread_for_users(post_id, set(post['props']['users']) - set(sorted_user_ids))
             else:
                 root_id = None
