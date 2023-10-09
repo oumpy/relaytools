@@ -59,7 +59,7 @@ class MattermostChannel:
             "Authorization": "Bearer {}".format(driver_params["token"]),
             "Content-Type": "application/json",
         }
-        self.base_url = driver_params.get("scheme","https") + "://" + driver_params["url"] + ":" + str(driver_params.get("port", 433))
+        self.base_url = driver_params.get("scheme","https") + "://" + driver_params["url"] + ":" + str(driver_params.get("port", 433)) + "/api/v4/"
 
         if after_weeksago is None:
             self.after_time = ANCIENT
