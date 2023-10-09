@@ -59,7 +59,7 @@ class MattermostChannel:
             "Authorization": "Bearer {}".format(driver_params["token"]),
             "Content-Type": "application/json",
         }
-        self.base_url = driver_params.get("scheme","https") + "://" + driver_params["url"] + ":" + str(driver_params.get("port", 433))
+        self.base_url = driver_params.get("scheme","https") + "://" + driver_params["url"] + ":" + str(driver_params.get("port", 433)) + "/api/v4/"
 
         if after_weeksago is None:
             self.after_time = ANCIENT
@@ -677,6 +677,9 @@ def main(args: argparse.Namespace):
                 },
                 root_id=root_id,
             )
+
+            if matching_posts:
+                mm_channel.unfollow_thread_for_users(post_id, set(post['props']['users']) - set(sorted_user_ids))
 
 
 relayadmin_help_message = """\
