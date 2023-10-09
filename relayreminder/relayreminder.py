@@ -678,6 +678,9 @@ def main(args: argparse.Namespace):
                 root_id=root_id,
             )
 
+            if matching_posts:
+                mm_channel.unfollow_thread_for_users(post_id, set(post['props']['users']) - set(sorted_user_ids))
+
 
 relayadmin_help_message = """\
 <Usage of /relayadmin>
