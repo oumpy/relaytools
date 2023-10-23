@@ -719,7 +719,7 @@ def create_slashcommand_app(args):
 
         # Verify the slash-command token
         if token != os.environ["MATTERMOST_BLACKLIST_TOKEN"]:
-            return jsonify({"text": "Invalid token"}), 403
+            return jsonify({"text": "Invalid token"})
 
         try:
             parser = argparse.ArgumentParser()
@@ -815,7 +815,7 @@ def create_slashcommand_app(args):
 
         # Verify the slash-command token
         if token != os.environ["MATTERMOST_WHENMYLAST_TOKEN"]:
-            return jsonify({"text": "Invalid token"}), 403
+            return jsonify({"text": "Invalid token"})
 
         driver_params = {
             "url": args.mm_url,
@@ -863,7 +863,7 @@ def create_slashcommand_app(args):
 
         # Verify the slash-command token
         if token != os.environ["MATTERMOST_RELAYADMIN_TOKEN"]:
-            return jsonify({"text": "Invalid token"}), 401
+            return jsonify({"text": "Invalid token"})
 
         driver_params = {
             "url": args.mm_url,
@@ -883,7 +883,7 @@ def create_slashcommand_app(args):
 
         roles = mm_channel.mm_driver.users.get_user(exec_user_id)["roles"].split()
         if "system_admin" not in roles:
-            return jsonify({"response_type": "ephemeral", "text": "You don't have correct permission to execute this command."}), 403
+            return jsonify({"response_type": "ephemeral", "text": "You don't have correct permission to execute this command."})
 
         if len(slash_args) == 0 or slash_args[0].lower() == "help":
             return jsonify({"response_type": "ephemeral", "text": relayadmin_help_message})
@@ -907,7 +907,7 @@ def create_slashcommand_app(args):
                 username = sub_args[0]
                 user_id = mm_channel.get_id_by_username(username)
                 if user_id is None:
-                    return jsonify({"response_type": "ephemeral", "text": f"{username} is not a member of relay-channel."}), 400
+                    return jsonify({"response_type": "ephemeral", "text": f"{username} is not a member of relay-channel."})
                 if sub_command == "stop":
                     until_date = parser.parse(sub_args[1]).date()
                     stop_data[user_id] = until_date.strftime("%Y-%m-%d")
