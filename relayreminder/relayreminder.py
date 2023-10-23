@@ -760,6 +760,7 @@ def create_slashcommand_app(args):
             args.team,
             args.channel,
             stdout_mode = args.stdout_mode,
+            week_shift_hours = args.week_shift_hours,
         )
         last_post_datetimes = mm_channel.get_last_post_datetimes(
             priority_filter="standard",
