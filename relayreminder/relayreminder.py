@@ -432,9 +432,9 @@ class MattermostChannel:
 
         return sorted_filtered_posts
 
-    def unfollow_thread_for_users(self, post_id: str, user_ids: Union[list, set, str]):
+    def _follow_thread_for_users(self, onoff: bool, post_id: str, user_ids: Union[list, set, str]):
         """
-        Unfollow a thread for a specific user.
+        Follow/Unfollow a thread for a specific user.
 
         Args:
             post_id (str): The ID of a post within the thread.
@@ -442,9 +442,10 @@ class MattermostChannel:
         """
         # If in stdout_mode, print the action and return
         if self.stdout_mode:
-            print(f"Unfollow action called for post ID '{post_id}' for user IDs '{user_ids}'")
+            follow_str = "Follow" if onoff else "Unfollow"
+            print(f"{follow_str} action called for post ID '{post_id}' for user IDs '{user_ids}'")
         else:
-            # Actually perform the unfollow action
+            # Actually perform the follow/unfollow action
             # Get the thread_id from the post_id
             thread_id = self.all_posts['posts'][post_id]['root_id'] or post_id
 
@@ -454,8 +455,17 @@ class MattermostChannel:
 
             for user_id in user_ids:
                 stop_url = os.path.join(self.base_url, "users", user_id, "teams", self.team_id, "threads", thread_id, "following")
-                requests.delete(stop_url, headers=self.headers)
+                if onoff == True:
+                    requests.put(stop_url, headers=self.headers)
+                else:
+                    requests.delete(stop_url, headers=self.headers)
         return
+
+    def follow_thread_for_users(self, *args):
+        return self._follow_thread_for_users(True, *args)
+
+    def unfollow_thread_for_users(self, *args):
+        return self._follow_thread_for_users(False, *args)
 
     def get_start_of_week_n_weeks_ago(self, n: int) -> datetime:
         now = datetime.now()
