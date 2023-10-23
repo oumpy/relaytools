@@ -432,9 +432,9 @@ class MattermostChannel:
 
         return sorted_filtered_posts
 
-    def unfollow_thread_for_users(self, post_id: str, user_ids: Union[list, set, str]):
+    def _follow_thread_for_users(self, onoff: bool, post_id: str, user_ids: Union[list, set, str]):
         """
-        Unfollow a thread for a specific user.
+        Follow/Unfollow a thread for a specific user.
 
         Args:
             post_id (str): The ID of a post within the thread.
@@ -442,9 +442,10 @@ class MattermostChannel:
         """
         # If in stdout_mode, print the action and return
         if self.stdout_mode:
-            print(f"Unfollow action called for post ID '{post_id}' for user IDs '{user_ids}'")
+            follow_str = "Follow" if onoff else "Unfollow"
+            print(f"{follow_str} action called for post ID '{post_id}' for user IDs '{user_ids}'")
         else:
-            # Actually perform the unfollow action
+            # Actually perform the follow/unfollow action
             # Get the thread_id from the post_id
             thread_id = self.all_posts['posts'][post_id]['root_id'] or post_id
 
@@ -454,8 +455,17 @@ class MattermostChannel:
 
             for user_id in user_ids:
                 stop_url = os.path.join(self.base_url, "users", user_id, "teams", self.team_id, "threads", thread_id, "following")
-                requests.delete(stop_url, headers=self.headers)
+                if onoff == True:
+                    requests.put(stop_url, headers=self.headers)
+                else:
+                    requests.delete(stop_url, headers=self.headers)
         return
+
+    def follow_thread_for_users(self, *args):
+        return self._follow_thread_for_users(True, *args)
+
+    def unfollow_thread_for_users(self, *args):
+        return self._follow_thread_for_users(False, *args)
 
     def get_start_of_week_n_weeks_ago(self, n: int) -> datetime:
         now = datetime.now()
@@ -709,7 +719,7 @@ def create_slashcommand_app(args):
 
         # Verify the slash-command token
         if token != os.environ["MATTERMOST_BLACKLIST_TOKEN"]:
-            return jsonify({"text": "Invalid token"}), 403
+            return jsonify({"text": "Invalid token"})
 
         try:
             parser = argparse.ArgumentParser()
@@ -760,6 +770,7 @@ def create_slashcommand_app(args):
             args.team,
             args.channel,
             stdout_mode = args.stdout_mode,
+            week_shift_hours = args.week_shift_hours,
         )
         last_post_datetimes = mm_channel.get_last_post_datetimes(
             priority_filter="standard",
@@ -804,7 +815,7 @@ def create_slashcommand_app(args):
 
         # Verify the slash-command token
         if token != os.environ["MATTERMOST_WHENMYLAST_TOKEN"]:
-            return jsonify({"text": "Invalid token"}), 403
+            return jsonify({"text": "Invalid token"})
 
         driver_params = {
             "url": args.mm_url,
@@ -852,7 +863,7 @@ def create_slashcommand_app(args):
 
         # Verify the slash-command token
         if token != os.environ["MATTERMOST_RELAYADMIN_TOKEN"]:
-            return jsonify({"text": "Invalid token"}), 401
+            return jsonify({"text": "Invalid token"})
 
         driver_params = {
             "url": args.mm_url,
@@ -872,7 +883,7 @@ def create_slashcommand_app(args):
 
         roles = mm_channel.mm_driver.users.get_user(exec_user_id)["roles"].split()
         if "system_admin" not in roles:
-            return jsonify({"response_type": "ephemeral", "text": "You don't have correct permission to execute this command."}), 403
+            return jsonify({"response_type": "ephemeral", "text": "You don't have correct permission to execute this command."})
 
         if len(slash_args) == 0 or slash_args[0].lower() == "help":
             return jsonify({"response_type": "ephemeral", "text": relayadmin_help_message})
@@ -896,7 +907,7 @@ def create_slashcommand_app(args):
                 username = sub_args[0]
                 user_id = mm_channel.get_id_by_username(username)
                 if user_id is None:
-                    return jsonify({"response_type": "ephemeral", "text": f"{username} is not a member of relay-channel."}), 400
+                    return jsonify({"response_type": "ephemeral", "text": f"{username} is not a member of relay-channel."})
                 if sub_command == "stop":
                     until_date = parser.parse(sub_args[1]).date()
                     stop_data[user_id] = until_date.strftime("%Y-%m-%d")
