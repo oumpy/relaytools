@@ -584,17 +584,13 @@ def parse_args() -> argparse.Namespace:
 
     return args
 
-def main(args: argparse.Namespace):
+def args2mm_channel(args: argparse.Namespace, max_week_limit: int=100):
     driver_params = {
         "url": args.mm_url,
         "scheme": args.scheme,
         "port": args.port,
         "token": args.bot_token
     }
-    # Load message data
-    message_data = load_tsv_data(args.message_file)
-    message_passed_weeks_list = sorted(message_data.keys())
-    max_week_limit = message_passed_weeks_list[-1]
 
     if args.all_history:
         after_weeksago = None
@@ -609,6 +605,48 @@ def main(args: argparse.Namespace):
         stdout_mode = args.stdout_mode,
         week_shift_hours = args.week_shift_hours,
     )
+    return mm_channel
+
+def post_records(mm_channel: MattermostChannel, app_name: str):
+    # Get last post dates for all user_ids
+    last_post_datetimes = mm_channel.get_last_post_datetimes(
+        priority_filter="standard",
+        is_thread_head=True,
+        app_name=app_name,
+        regard_join_as_post = True,
+        use_past_record = True,
+        use_admin_stop = True,
+    )
+
+    # Convert dates to week numbers
+    last_post_weeks = {user_id: mm_channel.get_week_number(datetime_) for user_id, datetime_ in last_post_datetimes.items()}
+
+    # Find users and message based on last post week number
+    users_to_notify = {}
+    for user_id, week in last_post_weeks.items():
+        if week not in users_to_notify:
+            users_to_notify[week] = []
+        users_to_notify[week].append(user_id)
+
+    # Post messages
+    result = []
+    for week, user_ids in sorted(users_to_notify.items(), key=lambda x: x[0]):
+        criteria = {
+            "props": {
+                "bot_app": app_name,
+                "type": "record",
+                "last_post_week": week,
+            }
+        }
+        matching_posts = mm_channel.filter_posts_by_criteria(criteria)
+        # Find the matching post with maximum weeks passed
+        last_passed_weeks = max([post['props']['passed_weeks'] for post in matching_posts], default=-1)
+        sorted_user_ids = sorted(user_ids, key=lambda uid: (last_post_datetimes[uid], uid))
+        result.append((week, last_passed_weeks, matching_posts, sorted_user_ids))
+    return result
+
+def main(args: argparse.Namespace, max_week_limit: int=100):
+    mm_channel = args2mm_channel(args, max_week_limit)
 
     if args.initialize:
         mm_channel.send_post(
@@ -621,41 +659,15 @@ def main(args: argparse.Namespace):
         )
         return
 
-    # Get last post dates for all user_ids
-    last_post_dates = mm_channel.get_last_post_datetimes(
-        priority_filter="standard",
-        is_thread_head=True,
-        app_name=args.app_name,
-        regard_join_as_post = True,
-        use_past_record = True,
-        use_admin_stop = True,
-    )
+    # Load message data
+    message_data = load_tsv_data(args.message_file)
+    message_passed_weeks_list = sorted(message_data.keys())
+    max_week_limit = message_passed_weeks_list[-1]
 
-    # Convert dates to week numbers
-    last_post_weeks = {user_id: mm_channel.get_week_number(date) for user_id, date in last_post_dates.items()}
     current_week_number = mm_channel.get_week_number(datetime.now())
 
-    # Find users and message based on last post week number
-    users_to_notify = {}
-    for user_id, week in last_post_weeks.items():
-        if week not in users_to_notify:
-            users_to_notify[week] = []
-        users_to_notify[week].append(user_id)
-
-    # Post messages
-    for week, user_ids in sorted(users_to_notify.items(), key=lambda x: x[0]):
+    for week, last_passed_weeks, matching_posts, user_ids in post_records(mm_channel, args.app_name):
         passed_weeks = current_week_number - week
-        criteria = {
-            "props": {
-                "bot_app": args.app_name,
-                "type": "record",
-                "last_post_week": week,
-            }
-        }
-        matching_posts = mm_channel.filter_posts_by_criteria(criteria)
-        # Find the matching post with maximum weeks passed
-        last_passed_weeks = max([post['props']['passed_weeks'] for post in matching_posts], default=-1)
-
         passed_weeks_k = bisect_right(message_passed_weeks_list, passed_weeks)
         if passed_weeks_k == 0:
             continue
@@ -663,8 +675,7 @@ def main(args: argparse.Namespace):
 
         if passed_weeks_to_post > last_passed_weeks or passed_weeks > max(max_week_limit, last_passed_weeks):
             message_start = message_data[passed_weeks_to_post].format(passed_weeks)
-            sorted_user_ids = sorted(user_ids, key=lambda uid: (last_post_dates[uid], uid))
-            mentions = '\n'.join([args.mention_format.format(f'@{mm_channel.get_username_by_id(user_id)}') for user_id in sorted_user_ids])
+            mentions = '\n'.join([args.mention_format.format(f'@{mm_channel.get_username_by_id(user_id)}') for user_id in user_ids])
 
             message = f"{message_start}\n{mentions}"
 
@@ -672,7 +683,7 @@ def main(args: argparse.Namespace):
                 post = matching_posts[-1]
                 post_id = post['id']
                 root_id = post['root_id'] or post_id
-                mm_channel.unfollow_thread_for_users(post_id, set(post['props']['users']) - set(sorted_user_ids))
+                mm_channel.unfollow_thread_for_users(post_id, set(post['props']['users']) - set(user_ids))
             else:
                 root_id = None
 
@@ -683,13 +694,13 @@ def main(args: argparse.Namespace):
                     "type": "record",
                     "last_post_week": week,
                     "passed_weeks": passed_weeks,
-                    "users": sorted_user_ids,
+                    "users": user_ids,
                 },
                 root_id=root_id,
             )
 
             if matching_posts:
-                mm_channel.unfollow_thread_for_users(post_id, set(post['props']['users']) - set(sorted_user_ids))
+                mm_channel.unfollow_thread_for_users(post_id, set(post['props']['users']) - set(user_ids))
 
 
 relayadmin_help_message = """\
@@ -759,34 +770,8 @@ def create_slashcommand_app(args):
                 },
             )
 
-        driver_params = {
-            "url": args.mm_url,
-            "scheme": args.scheme,
-            "port": args.port,
-            "token": args.bot_token
-        }
-        mm_channel = MattermostChannel(
-            driver_params,
-            args.team,
-            args.channel,
-            stdout_mode = args.stdout_mode,
-            week_shift_hours = args.week_shift_hours,
-        )
-        last_post_datetimes = mm_channel.get_last_post_datetimes(
-            priority_filter="standard",
-            is_thread_head=True,
-            app_name=args.app_name,
-            regard_join_as_post = True,
-            use_past_record = True,
-            use_admin_stop = True,
-        )
-
-        # Convert dates to week numbers
+        mm_channel = args2mm_channel(args)
         current_week_number = mm_channel.get_week_number(datetime.now())
-        passed_weeks_list = sorted([(user_id, post_time) 
-                                    for user_id, post_time in last_post_datetimes.items()
-                                    if min_weeks <= current_week_number - mm_channel.get_week_number(post_time) <= max_weeks],
-                                    key=lambda x: x[1], reverse=True)
 
         if max_weeks == float("inf"):
             message = args.blacklist_message_min.format(min_weeks)
@@ -794,7 +779,9 @@ def create_slashcommand_app(args):
             message = args.blacklist_message_minmax.format(min_weeks, max_weeks)
         message = (
             message + "\n"
-            + "\n".join([f"{mm_channel.get_dispname_by_id(user_id)} [{mm_channel.get_username_by_id(user_id)}] ({current_week_number - mm_channel.get_week_number(post_time)})"  for user_id, post_time in passed_weeks_list])
+            + "\n".join([f"{mm_channel.get_dispname_by_id(user_id)} [{mm_channel.get_username_by_id(user_id)}] ({current_week_number - week})"
+                         for week, _, _, user_ids in post_records(mm_channel, args.app_name)[::-1] if min_weeks <= current_week_number - week <= max_weeks
+                         for user_id in user_ids[::-1]])
         )
 
         return jsonify({
