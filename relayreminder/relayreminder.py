@@ -88,11 +88,16 @@ class MattermostChannel:
     def __del__(self):
         self.mm_driver.logout()
 
-    def get_week_number(self, target_datetime: Union[datetime, date]) -> int:
-        if isinstance(target_datetime, date):
+    def get_week_number(self, target_datetime: Union[datetime, date, int, float]) -> int:
+        if isinstance(target_datetime, datetime):
+            pass
+        elif isinstance(target_datetime, date):
             target_datetime = datetime(target_datetime.year, target_datetime.month, target_datetime.day)
+        elif isinstance(target_datetime, int) or isinstance(target_datetime, float):
+            target_datetime = datetime.fromtimestamp(target_datetime)
 
-        delta_days = (target_datetime - BASE_TIME - timedelta(hours=self.week_shift_hours)).days
+        delta_time = (target_datetime - BASE_TIME) - timedelta(hours=self.week_shift_hours)
+        delta_days = delta_time.days
         week_number = delta_days // 7
 
         return week_number
@@ -253,7 +258,7 @@ class MattermostChannel:
         if user_ids is None:
             user_ids = self.user_ids
 
-        last_post_dates = dict.fromkeys(user_ids, self.after_time)
+        last_post_datetimes = dict.fromkeys(user_ids, self.after_time)
 
         if priority_filter:
             priority_filter = priority_filter.lower()
@@ -277,28 +282,28 @@ class MattermostChannel:
             if user_id in user_ids:
                 if (priority_filter is None or priority == priority_filter) and \
                    (is_thread_head is None or bool(root_id) != is_thread_head):
-                    if user_id not in last_post_dates or create_at > last_post_dates[user_id]:
-                        last_post_dates[user_id] = create_at
+                    if user_id not in last_post_datetimes or create_at > last_post_datetimes[user_id]:
+                        last_post_datetimes[user_id] = create_at
 
         # Check channel-join-date.
         if (priority_filter is None or priority_filter == 'standard') and \
            (is_thread_head is None or is_thread_head):
-            for user_id, post_date in last_post_dates.items():
-                if regard_join_as_post and post_date <= self.after_time:
-                    join_date = self.get_join_datetime(user_id)
-                    if join_date > post_date:
-                        post_date = join_date
-                if use_past_record and post_date <= self.after_time:
-                    record_date = self.get_last_post_datetime_from_record(user_id, app_name)
-                    if record_date > post_date:
-                        post_date = record_date
+            for user_id, post_datetime in last_post_datetimes.items():
+                if regard_join_as_post and post_datetime <= self.after_time:
+                    join_datetime = self.get_join_datetime(user_id)
+                    if join_datetime > post_datetime:
+                        post_datetime = join_datetime
+                if use_past_record and post_datetime <= self.after_time:
+                    record_datetime = self.get_last_post_datetime_from_record(user_id, app_name)
+                    if record_datetime > post_datetime:
+                        post_datetime = record_datetime
                 if use_admin_stop:
-                    stop_date = self.get_stop_until(user_id)
-                    if stop_date > post_date:
-                        post_date = stop_date
-                last_post_dates[user_id] = post_date
+                    stop_datetime = self.get_stop_until(user_id)
+                    if stop_datetime > post_datetime:
+                        post_datetime = stop_datetime
+                last_post_datetimes[user_id] = post_datetime
 
-        return last_post_dates
+        return last_post_datetimes
 
     def get_join_datetime(self, user_id: str) -> datetime:
         """Get the date when a user joined the channel using system messages."""
@@ -329,6 +334,7 @@ class MattermostChannel:
     def get_last_post_datetime_from_record(self, user_id: str, app_name: Optional[str] = None) -> datetime:
         criteria = {
             "props": {
+                "bot_app": Anything,
                 "type": "record",
                 "users": [user_id],
             },
@@ -346,8 +352,9 @@ class MattermostChannel:
     def _fetch_stop_data(self, app_name: Optional[str] = None) -> datetime:
         criteria = {
             "props": {
+                "bot_app": Anything,
                 "type": "relaystop",
-                "data": Anything
+                "data": Anything,
             },
         }
         if app_name:
@@ -668,6 +675,8 @@ def main(args: argparse.Namespace, max_week_limit: int=100):
 
     for week, last_passed_weeks, matching_posts, user_ids in post_records(mm_channel, args.app_name):
         passed_weeks = current_week_number - week
+        if passed_weeks <= last_passed_weeks:
+            continue
         passed_weeks_k = bisect_right(message_passed_weeks_list, passed_weeks)
         if passed_weeks_k == 0:
             continue
