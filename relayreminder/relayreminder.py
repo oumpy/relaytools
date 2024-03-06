@@ -77,6 +77,7 @@ class MattermostChannel:
         self.users = self._fetch_users()
         self.id2name, self.name2id = self._fetch_usernames_and_ids()
         self.id2dispname = self._fetch_id2dispname()
+        self.id2email = self._fetch_id2email()
         self.id2user = self._fetch_id2user()
 
         self.all_posts = {'order': [], 'posts': {}}
@@ -186,6 +187,20 @@ class MattermostChannel:
 
         return id2dispname
 
+    def _fetch_id2email(self) -> Dict[str, str]:
+        """
+        Fetch emails based on user_ids.
+        
+        Returns:
+            A dictionary where keys are user_ids and values are corresponding emails.
+        """
+        id2email = {}
+        for user in self.users:
+            user_id = user["id"]
+            id2email[user_id] = user["email"]
+
+        return id2email
+
     def get_dispname_by_id(self, user_id: str) -> Optional[str]:
         """
         Get the display-name for a given user_id using the self.usernames dictionary.
@@ -194,6 +209,15 @@ class MattermostChannel:
             Username corresponding to the user_id or None if not found.
         """
         return self.id2dispname.get(user_id, None)
+
+    def get_email_by_id(self, user_id: str) -> Optional[str]:
+        """
+        Get the email for a given user_id using the self.usernames dictionary.
+        
+        Returns:
+            Username corresponding to the user_id or None if not found.
+        """
+        return self.id2email.get(user_id, None)
 
     def _fetch_posts(self, page_size=100) -> Dict:
         """
