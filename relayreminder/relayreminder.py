@@ -8,7 +8,7 @@
 # Lisence: GNU General Publice Lisence v3
 #
 
-from mattermostdriver import Driver, endpoints
+from mattermostautodriver import Driver, endpoints
 from datetime import datetime, date, timedelta
 import argparse
 from typing import List, Dict, Optional, Union, Any
@@ -104,7 +104,7 @@ class MattermostChannel:
         return week_number
 
     def _get_channel_id(self) -> str:
-        channel = self.mm_driver.channels.get_channel_by_name_and_team_name(self.team_name, self.channel_name)
+        channel = self.mm_driver.channels.get_channel_by_name_for_team_name(self.team_name, self.channel_name)
         return channel['id']
 
     def _fetch_users(self) -> Dict:
@@ -233,8 +233,8 @@ class MattermostChannel:
         page = 0
 
         while True:
-            posts = self.mm_driver.posts.client.get(
-                endpoints.posts.Channels.endpoint + '/' + self.channel_id + '/posts',
+            posts = self.mm_driver.client.get(
+                '/api/v4/channels/' + self.channel_id + '/posts',
                 params={
                     'since': int(self.after_time.timestamp() * 1000),
                     'per_page': page_size,
