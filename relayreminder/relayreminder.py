@@ -11,7 +11,7 @@
 from mattermostautodriver import Driver, endpoints
 from datetime import datetime, date, timedelta
 import argparse
-from typing import List, Dict, Optional, Union, Any
+from typing import List, Dict, Optional, Union, Any, Tuple
 import warnings
 from bisect import bisect_right
 import re
@@ -75,8 +75,7 @@ class MattermostChannel:
             self.channel_name = channel_name
             self.channel_id = self._get_channel_id()
         self.team_id = self.mm_driver.channels.get_channel(self.channel_id)["team_id"]
-        self.user_ids = self._fetch_user_ids()
-        self.users = self._fetch_users()
+        self.user_ids, self.users = self._fetch_ids_and_users()
         self.id2name, self.name2id = self._fetch_usernames_and_ids()
         self.id2dispname = self._fetch_id2dispname()
         self.id2email = self._fetch_id2email()
@@ -109,17 +108,21 @@ class MattermostChannel:
         channel = self.mm_driver.channels.get_channel_by_name_for_team_name(self.team_name, self.channel_name)
         return channel['id']
 
-    def _fetch_users(self) -> Dict:
-        users = [ self.mm_driver.users.get_user(user_id) for user_id in self.user_ids]
-        return users
-
-    def _fetch_user_ids(self) -> List[str]:
-        return [user["user_id"] for user in
-                self.mm_driver.channels.get_channel_members(
-                    self.channel_id,
-                    params={"page": 0, "per_page": MAX_MEMBERS}
-                    )
-                ]
+    def _fetch_ids_and_users(self) -> Tuple[Dict, List[str]]:
+        user_ids_all = [user["user_id"] for user in
+                        self.mm_driver.channels.get_channel_members(
+                            self.channel_id,
+                            params={"page": 0, "per_page": MAX_MEMBERS}
+                            )
+                        ]
+        user_ids = []
+        users = []
+        for user_id in user_ids_all:
+            user = self.mm_driver.users.get_user(user_id)
+            if user["delete_at"] == 0:
+                user_ids.append(user_id)
+                users.append(user)
+        return user_ids, users
 
     def _fetch_usernames_and_ids(self) -> Dict[str, str]:
         """
