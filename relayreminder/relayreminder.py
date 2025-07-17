@@ -29,6 +29,8 @@ BASE_TIME = datetime(1,1,1)
 BASE_DATE = BASE_TIME.date() # Monday
 ANCIENT = UNIX_EPOCH = datetime.utcfromtimestamp(0)
 
+MAX_MEMBERS = 4096
+
 class either:
     def __init__(self, *values):
         self.values = values
@@ -112,7 +114,12 @@ class MattermostChannel:
         return users
 
     def _fetch_user_ids(self) -> List[str]:
-        return [user["user_id"] for user in self.mm_driver.channels.get_channel_members(self.channel_id)]
+        return [user["user_id"] for user in
+                self.mm_driver.channels.get_channel_members(
+                    self.channel_id,
+                    params={"page": 0, "per_page": MAX_MEMBERS}
+                    )
+                ]
 
     def _fetch_usernames_and_ids(self) -> Dict[str, str]:
         """
