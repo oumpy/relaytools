@@ -2,7 +2,7 @@
 #
 # RelayReminder
 #
-# @2023 AtamaokaC
+# @2023-2025 AtamaokaC
 # Python Party of Osaka University Medical School, Japan
 #
 # Lisence: GNU General Publice Lisence v3
@@ -11,7 +11,7 @@
 from mattermostautodriver import Driver, endpoints
 from datetime import datetime, date, timedelta
 import argparse
-from typing import List, Dict, Optional, Union, Any, Tuple
+from typing import Optional, Union
 import warnings
 from bisect import bisect_right
 import re
@@ -47,7 +47,7 @@ class either:
 Anything = object()
 class MattermostChannel:
     def __init__(self,
-        driver_params: Dict,
+        driver_params: dict,
         team_name: str = "main",
         channel_name: str = "",
         channel_id: Optional[str] = None,
@@ -108,7 +108,7 @@ class MattermostChannel:
         channel = self.mm_driver.channels.get_channel_by_name_for_team_name(self.team_name, self.channel_name)
         return channel['id']
 
-    def _fetch_ids_and_users(self) -> Tuple[Dict, List[str]]:
+    def _fetch_ids_and_users(self) -> tuple[dict, list[str]]:
         user_ids_all = [user["user_id"] for user in
                         self.mm_driver.channels.get_channel_members(
                             self.channel_id,
@@ -124,7 +124,7 @@ class MattermostChannel:
                 users.append(user)
         return user_ids, users
 
-    def _fetch_usernames_and_ids(self) -> Dict[str, str]:
+    def _fetch_usernames_and_ids(self) -> dict[str, str]:
         """
         Fetch usernames based on user_ids.
         
@@ -140,7 +140,7 @@ class MattermostChannel:
             name2id[username] = user_id
         return id2name, name2id
 
-    def _fetch_id2user(self) -> Dict[str, Dict]:
+    def _fetch_id2user(self) -> dict[str, dict]:
         """        
         Returns:
             A dictionary where keys are user_ids and values are corresponding user data.
@@ -178,7 +178,7 @@ class MattermostChannel:
         """
         return self.name2id.get(username, None)
 
-    def _fetch_id2dispname(self) -> Dict[str, str]:
+    def _fetch_id2dispname(self) -> dict[str, str]:
         """
         Fetch display-names based on user_ids.
         
@@ -197,7 +197,7 @@ class MattermostChannel:
 
         return id2dispname
 
-    def _fetch_id2email(self) -> Dict[str, str]:
+    def _fetch_id2email(self) -> dict[str, str]:
         """
         Fetch emails based on user_ids.
         
@@ -229,7 +229,7 @@ class MattermostChannel:
         """
         return self.id2email.get(user_id, None)
 
-    def _fetch_posts(self, page_size=100) -> Dict:
+    def _fetch_posts(self, page_size=100) -> dict:
         """
         Fetch all posts in the channel since 'after_time' using pagination.
 
@@ -279,7 +279,7 @@ class MattermostChannel:
         return aggregated_posts
 
     def get_last_post_datetimes(self, 
-        user_ids: Optional[List[str]] = None,
+        user_ids: Optional[list[str]] = None,
         priority_filter: Optional[str] = None,
         is_thread_head: Optional[bool] = None,
         ignore_deleted_posts: Optional[bool] = True,
@@ -287,7 +287,7 @@ class MattermostChannel:
         regard_join_as_post: bool = False,
         use_past_record: bool = False,
         use_admin_stop: bool = False,
-    ) -> Dict[str, datetime]:
+    ) -> dict[str, datetime]:
 
         if user_ids is None:
             user_ids = self.user_ids
@@ -407,7 +407,7 @@ class MattermostChannel:
             return datetime(until_date.year, until_date.month, until_date.day) + timedelta(hours=self.week_shift_hours)
         return self.after_time
 
-    def send_post(self, message: str, props: Optional[Dict] = None, root_id: Optional[str] = None) -> Dict:
+    def send_post(self, message: str, props: Optional[dict] = None, root_id: Optional[str] = None) -> dict:
         payload = {
             'channel_id': self.channel_id,
             'message': message,
@@ -434,11 +434,11 @@ class MattermostChannel:
             except Exception as e:
                 return False
 
-    def filter_posts_by_criteria(self, criteria: Dict[str, Any], posts: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    def filter_posts_by_criteria(self, criteria: dict[str, object], posts: Optional[dict[str, object]] = None) -> list[dict[str, object]]:
         if posts is None:
             posts = self.all_posts['posts']
 
-        def match_criteria(data: Dict[str, Any], criteria: Dict[str, Any]) -> bool:
+        def match_criteria(data: dict[str, object], criteria: dict[str, object]) -> bool:
             for key, value in criteria.items():
                 try:
                     if key not in data:
@@ -521,7 +521,7 @@ class MattermostChannel:
         return target_time
 
 
-def load_tsv_data(file_path: str) -> Dict[int, str]:
+def load_tsv_data(file_path: str) -> dict[int, str]:
     data = {}
     with open(file_path, 'r', encoding='utf-8') as f:
         for line in f:
