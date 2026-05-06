@@ -8,7 +8,7 @@
 # Lisence: GNU General Publice Lisence v3
 #
 
-from mattermostautodriver import Driver, endpoints
+from mattermostautodriver import TypedDriver
 from datetime import datetime, date, timedelta
 import argparse
 from typing import Optional, Union
@@ -55,7 +55,7 @@ class MattermostChannel:
         stdout_mode: bool = False,
         week_shift_hours: int = 0,
     ):
-        self.mm_driver = Driver(driver_params)
+        self.mm_driver = TypedDriver(driver_params)
         self.mm_driver.login()
         self.headers = {
             "Authorization": "Bearer {}".format(driver_params["token"]),
@@ -112,7 +112,8 @@ class MattermostChannel:
         user_ids_all = [user["user_id"] for user in
                         self.mm_driver.channels.get_channel_members(
                             self.channel_id,
-                            params={"page": 0, "per_page": MAX_MEMBERS}
+                            page=0,
+                            per_page=MAX_MEMBERS,
                             )
                         ]
         user_ids = []
@@ -426,7 +427,7 @@ class MattermostChannel:
             return True
         else:
             try:
-                response = self.mm_driver.posts.create_post(payload)
+                response = self.mm_driver.posts.create_post(**payload)
                 if 'id' in response:
                     return True
                 else:
