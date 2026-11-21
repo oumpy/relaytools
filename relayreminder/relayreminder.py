@@ -8,7 +8,14 @@
 # Lisence: GNU General Publice Lisence v3
 #
 
-from mattermostautodriver import TypedDriver
+try:
+    # mattermostautodriver >= 10.x (11.x has only TypedDriver)
+    from mattermostautodriver import TypedDriver as MMDriver
+    MM_TYPED_DRIVER = True
+except ImportError:
+    # mattermostautodriver <= 2.x has only the untyped Driver
+    from mattermostautodriver import Driver as MMDriver
+    MM_TYPED_DRIVER = False
 from datetime import datetime, date, timedelta
 import argparse
 from typing import Optional, Union
@@ -56,7 +63,7 @@ class MattermostChannel:
         stdout_mode: bool = False,
         week_shift_hours: int = 0,
     ):
-        self.mm_driver = TypedDriver(driver_params)
+        self.mm_driver = MMDriver(driver_params)
         self.mm_driver.login()
         self.headers = {
             "Authorization": "Bearer {}".format(driver_params["token"]),
@@ -110,13 +117,11 @@ class MattermostChannel:
         return channel['id']
 
     def _fetch_ids_and_users(self) -> tuple[dict, list[str]]:
-        user_ids_all = [user["user_id"] for user in
-                        self.mm_driver.channels.get_channel_members(
-                            self.channel_id,
-                            page=0,
-                            per_page=MAX_MEMBERS,
-                            )
-                        ]
+        if MM_TYPED_DRIVER:
+            members = self.mm_driver.channels.get_channel_members(self.channel_id, page=0, per_page=MAX_MEMBERS)
+        else:
+            members = self.mm_driver.channels.get_channel_members(self.channel_id, params={"page": 0, "per_page": MAX_MEMBERS})
+        user_ids_all = [user["user_id"] for user in members]
         user_ids = []
         users = []
         for user_id in user_ids_all:
@@ -434,7 +439,10 @@ class MattermostChannel:
             return True
         else:
             try:
-                response = self.mm_driver.posts.create_post(**payload)
+                if MM_TYPED_DRIVER:
+                    response = self.mm_driver.posts.create_post(**payload)
+                else:
+                    response = self.mm_driver.posts.create_post(payload)
                 if 'id' in response:
                     return True
                 else:
