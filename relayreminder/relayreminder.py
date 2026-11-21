@@ -63,6 +63,8 @@ class MattermostChannel:
             "Content-Type": "application/json",
         }
         self.base_url = driver_params.get("scheme","https") + "://" + driver_params["url"] + ":" + str(driver_params.get("port", 433)) + "/api/v4/"
+        self.stdout_mode = stdout_mode
+        self.week_shift_hours = week_shift_hours  # needed by get_start_of_week_n_weeks_ago() below
 
         if after_weeksago is None:
             self.after_time = ANCIENT
@@ -85,8 +87,6 @@ class MattermostChannel:
         self.all_posts = {'order': [], 'posts': {}}
         self._fetch_posts()
         self.stop_data = self._fetch_stop_data()
-        self.stdout_mode = stdout_mode
-        self.week_shift_hours = week_shift_hours
 
     def __del__(self):
         self.mm_driver.logout()
