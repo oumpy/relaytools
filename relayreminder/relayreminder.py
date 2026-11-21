@@ -8,7 +8,14 @@
 # Lisence: GNU General Publice Lisence v3
 #
 
-from mattermostautodriver import Driver, endpoints
+try:
+    # mattermostautodriver >= 10.x (11.x has only TypedDriver)
+    from mattermostautodriver import TypedDriver as MMDriver
+    MM_TYPED_DRIVER = True
+except ImportError:
+    # mattermostautodriver <= 2.x has only the untyped Driver
+    from mattermostautodriver import Driver as MMDriver
+    MM_TYPED_DRIVER = False
 from datetime import datetime, date, timedelta
 import argparse
 from typing import Optional, Union
@@ -30,6 +37,7 @@ BASE_DATE = BASE_TIME.date() # Monday
 ANCIENT = UNIX_EPOCH = datetime.utcfromtimestamp(0)
 
 MAX_MEMBERS = 4096
+REQUEST_TIMEOUT = 30  # seconds, for direct `requests` calls
 
 class either:
     def __init__(self, *values):
@@ -55,13 +63,15 @@ class MattermostChannel:
         stdout_mode: bool = False,
         week_shift_hours: int = 0,
     ):
-        self.mm_driver = Driver(driver_params)
+        self.mm_driver = MMDriver(driver_params)
         self.mm_driver.login()
         self.headers = {
             "Authorization": "Bearer {}".format(driver_params["token"]),
             "Content-Type": "application/json",
         }
         self.base_url = driver_params.get("scheme","https") + "://" + driver_params["url"] + ":" + str(driver_params.get("port", 433)) + "/api/v4/"
+        self.stdout_mode = stdout_mode
+        self.week_shift_hours = week_shift_hours  # needed by get_start_of_week_n_weeks_ago() below
 
         if after_weeksago is None:
             self.after_time = ANCIENT
@@ -84,8 +94,6 @@ class MattermostChannel:
         self.all_posts = {'order': [], 'posts': {}}
         self._fetch_posts()
         self.stop_data = self._fetch_stop_data()
-        self.stdout_mode = stdout_mode
-        self.week_shift_hours = week_shift_hours
 
     def __del__(self):
         self.mm_driver.logout()
@@ -109,12 +117,11 @@ class MattermostChannel:
         return channel['id']
 
     def _fetch_ids_and_users(self) -> tuple[dict, list[str]]:
-        user_ids_all = [user["user_id"] for user in
-                        self.mm_driver.channels.get_channel_members(
-                            self.channel_id,
-                            params={"page": 0, "per_page": MAX_MEMBERS}
-                            )
-                        ]
+        if MM_TYPED_DRIVER:
+            members = self.mm_driver.channels.get_channel_members(self.channel_id, page=0, per_page=MAX_MEMBERS)
+        else:
+            members = self.mm_driver.channels.get_channel_members(self.channel_id, params={"page": 0, "per_page": MAX_MEMBERS})
+        user_ids_all = [user["user_id"] for user in members]
         user_ids = []
         users = []
         for user_id in user_ids_all:
@@ -229,45 +236,51 @@ class MattermostChannel:
         """
         return self.id2email.get(user_id, None)
 
-    def _fetch_posts(self, page_size=100) -> dict:
+    def _fetch_posts(self, page_size=200) -> dict:
         """
-        Fetch all posts in the channel since 'after_time' using pagination.
+        Fetch all posts in the channel since 'after_time', newest first.
+
+        - skipFetchThreads=true: without it, every page also carries the whole
+          threads of its posts, so long-lived threads (e.g. the bot's record
+          threads) are re-downloaded on every page.
+        - Cursor pagination with 'before' instead of 'page': offset-based pages
+          get slower the deeper they go.
+        - 'since' is not used: the server ignores page/per_page with it.
 
         Args:
-        - page_size (int): Number of posts to fetch in a single request. Default is 100.
+        - page_size (int): Number of posts to fetch in a single request.
+          Default is 200 (the server's maximum).
 
         Returns:
         - Dict: Aggregated posts.
         """
         aggregated_posts = {'posts': {}, 'order': []}
-        page = 0
+        after_ms = int(self.after_time.timestamp() * 1000)
+        params = {
+            'per_page': page_size,
+            'skipFetchThreads': 'true',
+        }
 
         while True:
             posts = self.mm_driver.client.get(
                 '/api/v4/channels/' + self.channel_id + '/posts',
-                params={
-                    'since': int(self.after_time.timestamp() * 1000),
-                    'per_page': page_size,
-                    'page': page
-                },
-                options = {
-                    'fields' : [
-                        'id',
-                        'create_at', 'delete_at',
-                        'metadata', 'props', 'root_id',
-                    ],
-                },
+                params=params,
             )
 
-            if not posts['posts']:
+            order = posts['order']
+            if not order:
                 break  # No more posts to fetch
 
+            # 'posts' also holds the root posts of replies in this page.
             aggregated_posts['posts'].update(posts['posts'])
-            aggregated_posts['order'].extend(posts['order'])
+            in_range = [post_id for post_id in order if posts['posts'][post_id]['create_at'] >= after_ms]
+            aggregated_posts['order'].extend(in_range)
 
-            page += 1  # Move to the next page
+            if len(in_range) < len(order):
+                break  # Reached posts older than 'after_time'
+            params['before'] = order[-1]  # Move to the next (older) page
 
-        if aggregated_posts['posts']:
+        if aggregated_posts['order']:
             oldest_time = datetime.fromtimestamp(
                 aggregated_posts['posts'][aggregated_posts['order'][-1]]['create_at'] / 1000
             )
@@ -426,12 +439,17 @@ class MattermostChannel:
             return True
         else:
             try:
-                response = self.mm_driver.posts.create_post(payload)
+                if MM_TYPED_DRIVER:
+                    response = self.mm_driver.posts.create_post(**payload)
+                else:
+                    response = self.mm_driver.posts.create_post(payload)
                 if 'id' in response:
                     return True
                 else:
+                    print(f"send_post: unexpected response (root_id={root_id!r}): {response!r}", file=sys.stderr)
                     return False
             except Exception as e:
+                print(f"send_post: failed (root_id={root_id!r}): {type(e).__name__}: {e}", file=sys.stderr)
                 return False
 
     def filter_posts_by_criteria(self, criteria: dict[str, object], posts: Optional[dict[str, object]] = None) -> list[dict[str, object]]:
@@ -496,10 +514,14 @@ class MattermostChannel:
 
             for user_id in user_ids:
                 stop_url = os.path.join(self.base_url, "users", user_id, "teams", self.team_id, "threads", thread_id, "following")
-                if onoff == True:
-                    requests.put(stop_url, headers=self.headers)
-                else:
-                    requests.delete(stop_url, headers=self.headers)
+                method = requests.put if onoff == True else requests.delete
+                try:
+                    response = method(stop_url, headers=self.headers, timeout=REQUEST_TIMEOUT)
+                    if not response.ok:
+                        print(f"follow_thread({onoff}): HTTP {response.status_code} for user {user_id}, thread {thread_id}", file=sys.stderr)
+                except requests.RequestException as e:
+                    # Don't abort the whole run (and its posts) for one follow-state change.
+                    print(f"follow_thread({onoff}): failed for user {user_id}, thread {thread_id}: {type(e).__name__}: {e}", file=sys.stderr)
         return
 
     def follow_thread_for_users(self, *args):
@@ -690,7 +712,7 @@ def main(args: argparse.Namespace, max_week_limit: int=100):
     mm_channel = args2mm_channel(args, max_week_limit)
 
     if args.initialize:
-        mm_channel.send_post(
+        ok = mm_channel.send_post(
             "Administration thread.",
             props={
                 "bot_app": args.app_name,
@@ -698,7 +720,7 @@ def main(args: argparse.Namespace, max_week_limit: int=100):
                 "data": dict(),
             },
         )
-        return
+        return 0 if ok else 1
 
     # Load message data
     message_data = load_tsv_data(args.message_file)
@@ -707,6 +729,7 @@ def main(args: argparse.Namespace, max_week_limit: int=100):
 
     current_week_number = mm_channel.get_week_number(datetime.now())
 
+    n_posts = n_failed = 0
     for week, last_passed_weeks, matching_posts, user_ids in post_records(mm_channel, args.app_name):
         passed_weeks = current_week_number - week
         if passed_weeks <= last_passed_weeks:
@@ -730,7 +753,8 @@ def main(args: argparse.Namespace, max_week_limit: int=100):
             else:
                 root_id = None
 
-            mm_channel.send_post(
+            n_posts += 1
+            if not mm_channel.send_post(
                 message,
                 props={
                     "bot_app": args.app_name,
@@ -740,10 +764,16 @@ def main(args: argparse.Namespace, max_week_limit: int=100):
                     "users": user_ids,
                 },
                 root_id=root_id,
-            )
+            ):
+                n_failed += 1
 
             if matching_posts:
                 mm_channel.unfollow_thread_for_users(post_id, set(post['props']['users']) - set(user_ids))
+
+    if n_failed:
+        print(f"main: {n_failed} of {n_posts} posts failed.", file=sys.stderr)
+        return 1
+    return 0
 
 
 relayadmin_help_message = """\
@@ -1014,7 +1044,7 @@ if __name__ == "__main__":
             app = create_slashcommand_app(args)
             app.run(host=args.slashcommand_host, port=args.slashcommand_port)
     else:
-        main(args)
+        sys.exit(main(args))
 elif __name__ == "relayreminder" and bool(strtobool(os.environ["RELAYREMINDER_SLASHCOMMAND_MODE"])):
     sys.argv = sys.argv[:1]
     args = parse_args()
