@@ -24,7 +24,6 @@ from bisect import bisect_right
 import re
 import os
 import sys
-from distutils.util import strtobool
 from dotenv import load_dotenv
 import subprocess
 from flask import Flask, request, jsonify, g
@@ -34,7 +33,17 @@ import shlex
 
 BASE_TIME = datetime(1,1,1)
 BASE_DATE = BASE_TIME.date() # Monday
-ANCIENT = UNIX_EPOCH = datetime.utcfromtimestamp(0)
+ANCIENT = UNIX_EPOCH = datetime(1970, 1, 1)  # == datetime.utcfromtimestamp(0) (naive), deprecated since Python 3.12
+
+
+def strtobool(val: str) -> int:
+    """Same as distutils.util.strtobool (distutils was removed in Python 3.12)."""
+    val = val.lower()
+    if val in ("y", "yes", "t", "true", "on", "1"):
+        return 1
+    if val in ("n", "no", "f", "false", "off", "0"):
+        return 0
+    raise ValueError(f"invalid truth value {val!r}")
 
 MAX_MEMBERS = 4096
 REQUEST_TIMEOUT = 30  # seconds, for direct `requests` calls
