@@ -24,6 +24,10 @@ from bisect import bisect_right
 import re
 import os
 import sys
+import json
+import time
+import fcntl
+import tempfile
 from dotenv import load_dotenv
 import subprocess
 from flask import Flask, request, jsonify, g
@@ -49,6 +53,23 @@ MEMBERS_PER_PAGE = 200    # the server caps per_page at 200
 USERS_PER_REQUEST = 200   # user IDs per POST /users/ids request
 REQUEST_TIMEOUT = 30  # seconds, for direct `requests` calls
 
+# Local post cache (used by the slash-commands to avoid re-downloading the whole channel)
+POST_CACHE_VERSION = 1
+POST_CACHE_FIELDS = ("id", "user_id", "channel_id", "create_at", "update_at", "delete_at", "root_id", "type", "props")
+SINCE_RESULT_LIMIT = 1000           # GET .../posts?since= returns at most 1000 changed posts (an arbitrary 1000 when
+                                    # there are more) plus their thread roots: 1000 or more may be truncated
+SINCE_MARGIN_MS = 5 * 60 * 1000     # every sync re-reads the last 5 minutes before the newest known update
+CHANNEL_ID_PATTERN = re.compile(r"[a-z0-9]{26}")
+
+
+def slim_post(post: dict) -> dict:
+    """The part of a post that this script reads: no message body, only metadata.priority of the metadata."""
+    slim = {key: post[key] for key in POST_CACHE_FIELDS if key in post}
+    metadata = post.get("metadata")
+    if isinstance(metadata, dict) and "priority" in metadata:
+        slim["metadata"] = {"priority": metadata["priority"]}
+    return slim
+
 class either:
     def __init__(self, *values):
         self.values = values
@@ -72,7 +93,18 @@ class MattermostChannel:
         after_weeksago: Optional[int] = None,
         stdout_mode: bool = False,
         week_shift_hours: int = 0,
+        post_cache_dir: Optional[str] = None,
+        incremental: bool = False,
+        post_cache_max_age_days: float = 8,
     ):
+        """
+        post_cache_dir: directory of the local post cache (None: no cache).
+            The cache is used only for the whole history (after_weeksago is None).
+        incremental: bring the cached posts up to date with one `since=` request
+            instead of a full fetch (falls back to a full fetch when the cache is
+            missing, unusable, or older than post_cache_max_age_days). A full
+            fetch always rewrites the cache.
+        """
         self.mm_driver = MMDriver(driver_params)
         self.mm_driver.login()
         self.headers = {
@@ -103,7 +135,13 @@ class MattermostChannel:
 
         self.all_posts = {'order': [], 'posts': {}}
         self._index = None
-        self._fetch_posts()
+        self.post_cache_path = None
+        if post_cache_dir and after_weeksago is None and CHANNEL_ID_PATTERN.fullmatch(self.channel_id or ""):
+            self.post_cache_path = os.path.join(post_cache_dir, f"posts-{self.channel_id}.json")
+        self.incremental = incremental
+        self.post_cache_max_age_days = post_cache_max_age_days
+        self.posts_source = None  # "full" or "cache", for diagnostics
+        self._load_posts()
         self.stop_data = self._fetch_stop_data()
 
     # No logout() on teardown: with a bot access token it only revokes the
@@ -317,8 +355,134 @@ class MattermostChannel:
 
         self.all_posts = aggregated_posts  # Update the all_posts property
         self._index = None  # rebuilt on demand by _post_index()
+        self.posts_source = "full"
         # print(*list(self.all_posts['posts'].values()), sep='\n')
         return aggregated_posts
+
+    # ---- local post cache -------------------------------------------------
+    # File: <post_cache_dir>/posts-<channel_id>.json
+    #   {"version", "channel_id", "full_fetch_at" (local ms), "last_update" (max update_at, server ms),
+    #    "posts": {post_id: slim_post(post)}}
+    # `since=` returns the posts of the channel with update_at > since, deleted ones included
+    # (a reply also bumps its root's update_at), but at most 1000 of them (plus thread roots).
+
+    def _load_posts(self) -> None:
+        """Fill all_posts by a full fetch, or from the cache brought up to date (incremental)."""
+        if self.post_cache_path is None:
+            self._fetch_posts()
+            return
+        try:
+            lock = self._lock_post_cache()
+        except OSError as e:
+            print(f"post cache: cannot lock {self.post_cache_path}: {e}; not using the cache", file=sys.stderr)
+            self._fetch_posts()
+            return
+        try:
+            if self.incremental and self._sync_posts_from_cache():
+                return
+            self._fetch_posts()
+            self._save_post_cache()
+        finally:
+            lock.close()  # releases the flock
+
+    def _lock_post_cache(self):
+        """Exclusive lock shared by the cron job and the gunicorn workers."""
+        os.makedirs(os.path.dirname(self.post_cache_path), mode=0o700, exist_ok=True)
+        lock = open(self.post_cache_path + ".lock", "a")
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+        except OSError:
+            lock.close()
+            raise
+        return lock
+
+    def _set_all_posts(self, posts: dict) -> None:
+        """all_posts from cached posts, as _fetch_posts() would have built it for the whole history."""
+        order = sorted(posts, key=lambda post_id: posts[post_id]['create_at'], reverse=True)
+        self.all_posts = {'posts': posts, 'order': order}
+        self._index = None
+        if order:
+            oldest_time = datetime.fromtimestamp(posts[order[-1]]['create_at'] / 1000)
+            if oldest_time > self.after_time:
+                self.after_time = oldest_time
+        self.posts_source = "cache"
+
+    def _sync_posts_from_cache(self) -> bool:
+        """Update the cache with one `since=` request and use it. False: a full fetch is needed."""
+        try:
+            with open(self.post_cache_path, encoding="utf-8") as f:
+                cache = json.load(f)
+            if cache.get("version") != POST_CACHE_VERSION or cache.get("channel_id") != self.channel_id:
+                return False
+            age_ms = time.time() * 1000 - cache["full_fetch_at"]
+            if age_ms > self.post_cache_max_age_days * 86400 * 1000:
+                return False
+            posts = cache["posts"]
+            last_update = int(cache["last_update"])
+            if not isinstance(posts, dict):
+                raise TypeError("'posts' is not a dict")
+        except FileNotFoundError:
+            return False
+        except (OSError, ValueError, KeyError, TypeError) as e:
+            print(f"post cache: unusable {self.post_cache_path} ({type(e).__name__}: {e}); doing a full fetch", file=sys.stderr)
+            return False
+
+        try:
+            changed = self.mm_driver.client.get(
+                '/api/v4/channels/' + self.channel_id + '/posts',
+                params={'since': max(last_update - SINCE_MARGIN_MS, 1), 'skipFetchThreads': 'true'},
+            )
+            changed_order, changed_posts = changed['order'], changed['posts']
+        except Exception as e:
+            print(f"post cache: since= request failed ({type(e).__name__}: {e}); doing a full fetch", file=sys.stderr)
+            return False
+        if len(changed_order) >= SINCE_RESULT_LIMIT:
+            return False  # possibly truncated by the server
+
+        dirty = False
+        for post_id, post in changed_posts.items():
+            if post.get('delete_at'):
+                # deleted: the full fetch does not return it either
+                dirty |= posts.pop(post_id, None) is not None
+            else:
+                slim = slim_post(post)
+                if posts.get(post_id) != slim:
+                    posts[post_id] = slim
+                    dirty = True
+            last_update = max(last_update, post.get('update_at', 0))
+
+        self._set_all_posts(posts)
+        if dirty or last_update != cache["last_update"]:
+            cache["posts"] = posts
+            cache["last_update"] = last_update
+            self._write_post_cache(cache)
+        return True
+
+    def _save_post_cache(self) -> None:
+        """Rewrite the cache from a full fetch."""
+        posts = {post_id: slim_post(post) for post_id, post in self.all_posts['posts'].items()}
+        self._write_post_cache({
+            "version": POST_CACHE_VERSION,
+            "channel_id": self.channel_id,
+            "full_fetch_at": int(time.time() * 1000),
+            "last_update": max((post.get('update_at', 0) for post in posts.values()), default=0),
+            "posts": posts,
+        })
+
+    def _write_post_cache(self, cache: dict) -> None:
+        """Atomic write (temporary file + rename); failures are reported but not fatal."""
+        tmp = None
+        try:
+            fd, tmp = tempfile.mkstemp(dir=os.path.dirname(self.post_cache_path), prefix=".posts-", suffix=".tmp")
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(cache, f, ensure_ascii=False, separators=(",", ":"))
+            os.replace(tmp, self.post_cache_path)
+            tmp = None
+        except OSError as e:
+            print(f"post cache: cannot write {self.post_cache_path}: {e}", file=sys.stderr)
+        finally:
+            if tmp is not None and os.path.exists(tmp):
+                os.unlink(tmp)
 
     def _post_index(self) -> dict:
         """
@@ -680,6 +844,11 @@ def parse_args() -> argparse.Namespace:
                         default=bool(strtobool(os.environ.get("RELAYREMINDER_ALL_HISTORY", "false"))),
                         help="Search all history of the channel.")
     parser.add_argument("--week-shift-hours", type=int, default=int(os.environ.get("RELAYREMINDER_WEEK_SHIFT_HOURS", 0)), help="Shift the beginning of weeks by n-hours.")
+    parser.add_argument("--post-cache-dir", type=str,
+                        default=os.environ.get("RELAYREMINDER_POST_CACHE_DIR", os.path.join(os.path.expanduser("~"), ".relayreminder", "cache")),
+                        help="Directory of the local post cache; slash-commands update it incrementally, the weekly run rewrites it. Empty: no cache.")
+    parser.add_argument("--post-cache-max-age-days", type=float, default=float(os.environ.get("RELAYREMINDER_POST_CACHE_MAX_AGE_DAYS", 8)),
+                        help="Slash-commands do a full fetch when the cache's last full fetch is older than this.")
 
     # slashcommand mode
     parser.add_argument("--slashcommand-mode", action="store_true",
@@ -712,6 +881,8 @@ def parse_args() -> argparse.Namespace:
     os.environ["RELAYREMINDER_STDOUT_MODE"] = str(args.stdout_mode)
     os.environ["RELAYREMINDER_ALL_HISTORY"] = str(args.all_history)
     os.environ["RELAYREMINDER_WEEK_SHIFT_HOURS"] = str(args.week_shift_hours)
+    os.environ["RELAYREMINDER_POST_CACHE_DIR"] = args.post_cache_dir
+    os.environ["RELAYREMINDER_POST_CACHE_MAX_AGE_DAYS"] = str(args.post_cache_max_age_days)
 
     # slashcommand mode
     os.environ["RELAYREMINDER_SLASHCOMMAND_MODE"] = str(args.slashcommand_mode)
@@ -729,7 +900,14 @@ def parse_args() -> argparse.Namespace:
 
     return args
 
-def args2mm_channel(args: argparse.Namespace, max_week_limit: int=100):
+def post_cache_kwargs(args: argparse.Namespace, incremental: bool) -> dict:
+    return {
+        "post_cache_dir": args.post_cache_dir or None,
+        "incremental": incremental,
+        "post_cache_max_age_days": args.post_cache_max_age_days,
+    }
+
+def args2mm_channel(args: argparse.Namespace, max_week_limit: int=100, incremental: bool=False):
     driver_params = {
         "url": args.mm_url,
         "scheme": args.scheme,
@@ -749,6 +927,7 @@ def args2mm_channel(args: argparse.Namespace, max_week_limit: int=100):
         after_weeksago = after_weeksago,
         stdout_mode = args.stdout_mode,
         week_shift_hours = args.week_shift_hours,
+        **post_cache_kwargs(args, incremental),
     )
     return mm_channel
 
@@ -918,7 +1097,7 @@ def create_slashcommand_app(args):
                 },
             )
 
-        mm_channel = args2mm_channel(args)
+        mm_channel = args2mm_channel(args, incremental=True)
         current_week_number = mm_channel.get_week_number(datetime.now())
 
         if max_weeks == float("inf"):
@@ -962,6 +1141,7 @@ def create_slashcommand_app(args):
             driver_params,
             channel_id = data.get("channel_id"),
             stdout_mode = args.stdout_mode,
+            **post_cache_kwargs(args, incremental=True),
         )
         user_id = data.get("user_id")
         last_post_datetime_all = mm_channel.get_last_post_datetimes(user_ids=[user_id], app_name=args.app_name)[user_id]
@@ -1011,6 +1191,7 @@ def create_slashcommand_app(args):
             team_name = args.team,
             channel_name = args.channel,
             stdout_mode = args.stdout_mode,
+            **post_cache_kwargs(args, incremental=True),
         )
         exec_user_id = data.get("user_id")
         # channel_id = mm_channel.channel_id
