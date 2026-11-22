@@ -104,8 +104,9 @@ class MattermostChannel:
         self._fetch_posts()
         self.stop_data = self._fetch_stop_data()
 
-    def __del__(self):
-        self.mm_driver.logout()
+    # No logout() on teardown: with a bot access token it only revokes the
+    # server-side session of that token, which other tools sharing the token
+    # (e.g. acrank) may be using at the same time.
 
     def get_week_number(self, target_datetime: Union[datetime, date, int, float]) -> int:
         if isinstance(target_datetime, datetime):
