@@ -45,7 +45,8 @@ def strtobool(val: str) -> int:
         return 0
     raise ValueError(f"invalid truth value {val!r}")
 
-MAX_MEMBERS = 4096
+MEMBERS_PER_PAGE = 200    # the server caps per_page at 200
+USERS_PER_REQUEST = 200   # user IDs per POST /users/ids request
 REQUEST_TIMEOUT = 30  # seconds, for direct `requests` calls
 
 class either:
@@ -101,6 +102,7 @@ class MattermostChannel:
         self.id2user = self._fetch_id2user()
 
         self.all_posts = {'order': [], 'posts': {}}
+        self._index = None
         self._fetch_posts()
         self.stop_data = self._fetch_stop_data()
 
@@ -126,17 +128,33 @@ class MattermostChannel:
         channel = self.mm_driver.channels.get_channel_by_name_for_team_name(self.team_name, self.channel_name)
         return channel['id']
 
-    def _fetch_ids_and_users(self) -> tuple[dict, list[str]]:
-        if MM_TYPED_DRIVER:
-            members = self.mm_driver.channels.get_channel_members(self.channel_id, page=0, per_page=MAX_MEMBERS)
-        else:
-            members = self.mm_driver.channels.get_channel_members(self.channel_id, params={"page": 0, "per_page": MAX_MEMBERS})
-        user_ids_all = [user["user_id"] for user in members]
+    def _fetch_ids_and_users(self) -> tuple[list[str], list[dict]]:
+        # Channel members, page by page (per_page above the server's cap of 200
+        # would silently truncate the list).
+        user_ids_all = []
+        page = 0
+        while True:
+            if MM_TYPED_DRIVER:
+                members = self.mm_driver.channels.get_channel_members(self.channel_id, page=page, per_page=MEMBERS_PER_PAGE)
+            else:
+                members = self.mm_driver.channels.get_channel_members(self.channel_id, params={"page": page, "per_page": MEMBERS_PER_PAGE})
+            user_ids_all += [member["user_id"] for member in members]
+            if len(members) < MEMBERS_PER_PAGE:
+                break
+            page += 1
+
+        # User data in batches (POST /users/ids) instead of one GET /users/{id} per member.
+        id2user = {}
+        for i in range(0, len(user_ids_all), USERS_PER_REQUEST):
+            for user in self.mm_driver.client.post('/api/v4/users/ids', options=user_ids_all[i:i + USERS_PER_REQUEST]):
+                id2user[user["id"]] = user
+
+        # Keep the member order; drop deactivated users.
         user_ids = []
         users = []
         for user_id in user_ids_all:
-            user = self.mm_driver.users.get_user(user_id)
-            if user["delete_at"] == 0:
+            user = id2user.get(user_id)
+            if user is not None and user["delete_at"] == 0:
                 user_ids.append(user_id)
                 users.append(user)
         return user_ids, users
@@ -298,8 +316,76 @@ class MattermostChannel:
                 self.after_time = oldest_time
 
         self.all_posts = aggregated_posts  # Update the all_posts property
+        self._index = None  # rebuilt on demand by _post_index()
         # print(*list(self.all_posts['posts'].values()), sep='\n')
         return aggregated_posts
+
+    def _post_index(self) -> dict:
+        """
+        Lookup tables built in one pass over all_posts.
+
+        get_join_datetime(), get_last_post_datetime_from_record() and
+        get_record_posts_for_week() used to call filter_posts_by_criteria(),
+        i.e. scan every post, once per user or week; this index gives the same
+        answers (same matching rules and tie-breaking) without the rescans.
+        """
+        if self._index is not None:
+            return self._index
+
+        join_channel = {}     # user_id -> earliest create_at of a system_join_channel post by the user
+        add_to_channel = {}   # user_id -> earliest create_at of a system_add_to_channel post adding the user
+        last_record = {}      # (bot_app or Anything, user_id) -> latest "record" post listing the user
+        week_records = {}     # (bot_app, last_post_week) -> "record" posts, in all_posts order
+
+        def hashable(value) -> bool:
+            try:
+                hash(value)
+                return True
+            except TypeError:
+                return False
+
+        for post in self.all_posts['posts'].values():
+            create_at = post['create_at']
+            post_type = post.get('type')
+            if post_type == 'system_join_channel' and 'user_id' in post:
+                user_id = post['user_id']
+                if user_id not in join_channel or create_at < join_channel[user_id]:
+                    join_channel[user_id] = create_at
+
+            props = post.get('props')
+            if not isinstance(props, dict):
+                continue
+            if post_type == 'system_add_to_channel' and 'addedUserId' in props and hashable(props['addedUserId']):
+                user_id = props['addedUserId']
+                if user_id not in add_to_channel or create_at < add_to_channel[user_id]:
+                    add_to_channel[user_id] = create_at
+
+            if 'bot_app' not in props or props.get('type') != 'record':
+                continue
+            bot_app = props['bot_app']
+            if isinstance(props.get('users'), list):
+                for user_id in props['users']:
+                    if not hashable(user_id):
+                        continue
+                    for key in ((Anything, user_id), (bot_app, user_id)):
+                        if not hashable(key):
+                            continue
+                        # '>=': the last of equal create_at wins, as with a stable sort
+                        if key not in last_record or create_at >= last_record[key]['create_at']:
+                            last_record[key] = post
+            if 'last_post_week' in props and hashable((bot_app, props['last_post_week'])):
+                week_records.setdefault((bot_app, props['last_post_week']), []).append(post)
+
+        for posts in week_records.values():
+            posts.sort(key=lambda post: post['create_at'])  # stable, like filter_posts_by_criteria()
+
+        self._index = {
+            'join_channel': join_channel,
+            'add_to_channel': add_to_channel,
+            'last_record': last_record,
+            'week_records': week_records,
+        }
+        return self._index
 
     def get_last_post_datetimes(self, 
         user_ids: Optional[list[str]] = None,
@@ -316,6 +402,7 @@ class MattermostChannel:
             user_ids = self.user_ids
 
         last_post_datetimes = dict.fromkeys(user_ids, self.after_time)
+        user_id_set = set(user_ids)
 
         if priority_filter:
             priority_filter = priority_filter.lower()
@@ -336,7 +423,7 @@ class MattermostChannel:
             # if post.get("type", "") == "system_join_leave":
             #     continue
 
-            if user_id in user_ids:
+            if user_id in user_id_set:
                 if (priority_filter is None or priority == priority_filter) and \
                    (is_thread_head is None or bool(root_id) != is_thread_head):
                     if user_id not in last_post_datetimes or create_at > last_post_datetimes[user_id]:
@@ -364,22 +451,12 @@ class MattermostChannel:
 
     def get_join_datetime(self, user_id: str) -> datetime:
         """Get the date when a user joined the channel using system messages."""
-        criteria = [
-            {
-                "type": "system_join_channel",
-                "user_id": user_id,
-            },
-            {
-                "type": "system_add_to_channel",
-                "props": {"addedUserId": user_id,},
-            },
-        ]
-        filtered_posts = [
-            self.filter_posts_by_criteria(criterion) for criterion in criteria
-        ]
-
+        # For each kind of system post (joined by themselves / added by someone),
+        # take the earliest one; then the later of the two.
+        index = self._post_index()
         join_time_milliseconds = max(
-            (posts + [{"create_at": 0}])[0]["create_at"] for posts in filtered_posts
+            index['join_channel'].get(user_id, 0),
+            index['add_to_channel'].get(user_id, 0),
         )
         if join_time_milliseconds > 0:
             join_time = datetime.fromtimestamp(join_time_milliseconds / 1000)
@@ -389,22 +466,17 @@ class MattermostChannel:
         return join_time
 
     def get_last_post_datetime_from_record(self, user_id: str, app_name: Optional[str] = None) -> datetime:
-        criteria = {
-            "props": {
-                "bot_app": Anything,
-                "type": "record",
-                "users": [user_id],
-            },
-        }
-        if app_name:
-            criteria["props"]["bot_app"] = app_name
-
-        posts = self.filter_posts_by_criteria(criteria)
-        if posts:
-            last_post_week = posts[-1]["props"]["last_post_week"]
+        # Latest "record" post (of app_name, or of any app) that lists the user
+        post = self._post_index()['last_record'].get((app_name if app_name else Anything, user_id))
+        if post:
+            last_post_week = post["props"]["last_post_week"]
             return self.get_start_of_week(last_post_week)
         else:
             return self.after_time
+
+    def get_record_posts_for_week(self, app_name: str, week: int) -> list[dict]:
+        """Record posts of app_name whose last_post_week == week, oldest first."""
+        return list(self._post_index()['week_records'].get((app_name, week), []))
 
     def _fetch_stop_data(self, app_name: Optional[str] = None) -> datetime:
         criteria = {
@@ -704,14 +776,7 @@ def post_records(mm_channel: MattermostChannel, app_name: str):
     # Post messages
     result = []
     for week, user_ids in sorted(users_to_notify.items(), key=lambda x: x[0]):
-        criteria = {
-            "props": {
-                "bot_app": app_name,
-                "type": "record",
-                "last_post_week": week,
-            }
-        }
-        matching_posts = mm_channel.filter_posts_by_criteria(criteria)
+        matching_posts = mm_channel.get_record_posts_for_week(app_name, week)
         # Find the matching post with maximum weeks passed
         last_passed_weeks = max([post['props']['passed_weeks'] for post in matching_posts], default=-1)
         sorted_user_ids = sorted(user_ids, key=lambda uid: (last_post_datetimes[uid], uid))
